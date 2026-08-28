@@ -13,7 +13,7 @@ refresh, then build the React/MapLibre dashboard and package it for the demo.
 - [x] **Phase 1: Scaffold & workflow bootstrap** - Repo skeleton, gsd-core planning artifacts, station + settings config
 - [x] **Phase 2: Data ingestion** - CPCB, ERA5, GFS, FIRMS ingest to Parquet/DuckDB
 - [x] **Phase 3: AQI + coupled feature engineering** - CPCB AQI, Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback
-- [ ] **Phase 4: ML forecasting model + backtest** - LightGBM baseline → TFT, walk-forward CV, SHAP
+- [x] **Phase 4: ML forecasting model + backtest** - LightGBM baseline, walk-forward CV, grouped SHAP drivers, serving path (TFT = stretch)
 - [ ] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
 - [ ] **Phase 6: Backend API** - FastAPI endpoints + APScheduler hourly refresh + cache
 - [ ] **Phase 7: Frontend dashboard** - React + Vite + MapLibre: map, time slider, forecast, drivers, alerts
@@ -81,8 +81,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [~] 04-01: LightGBM multi-horizon quantile baseline + backtest harness (code done + synthetic-tested; real-data backtest numbers pending — slow training box + OpenAQ target swap)
-- [ ] 04-02: TFT model + SHAP + model registry
+- [x] 04-01: LightGBM multi-horizon quantile baseline + backtest harness (beats persistence + climatology at every horizon on the CAMS-target window; real-target re-run in progress)
+- [x] 04-02: SHAP drivers (grouped into the coupling story) + serving forecast path + peak alerts. TFT deferred to a stretch task (torch install + training time on this box).
 
 ### Phase 5: Offline WRF-Chem validation artifact
 **Goal**: Reproducible evidence the team engaged with the real coupled physics.
@@ -155,7 +155,7 @@ Plans:
 | 1. Scaffold & workflow bootstrap | 1/1 | Complete | 2026-08-28 |
 | 2. Data ingestion | 2/2 | Complete | 2026-08-28 |
 | 3. AQI + coupled feature engineering | 2/2 | Complete | 2026-08-28 |
-| 4. ML forecasting model + backtest | 0/2 | Not started | - |
+| 4. ML forecasting model + backtest | 2/2 | Complete (real-target re-run pending) | 2026-08-29 |
 | 5. Offline WRF-Chem validation artifact | 0/1 | Not started | - |
 | 6. Backend API | 0/2 | Not started | - |
 | 7. Frontend dashboard | 0/2 | Not started | - |

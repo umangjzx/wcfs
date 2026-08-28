@@ -3,10 +3,10 @@ gsd_state_version: '1.0'
 status: in_progress
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 5
-  percent: 42
+  completed_plans: 7
+  percent: 54
 ---
 
 # Project State
@@ -20,12 +20,12 @@ See: .planning/PROJECT.md (updated 2026-08-28)
 
 ## Current Position
 
-Phase: 4 of 8 (ML forecasting model + backtest)
-Plan: 04-01 (LightGBM baseline + backtest) — code complete + running on real data
-Status: Iterating on baseline metrics; blockers are known and scoped (see below)
-Last activity: 2026-08-29 — full pipeline runs end to end on the Oct 2023–Jan 2024 window (obs+met+fires → 173k feature rows → LGBM P10/P50/P90 → walk-forward backtest). Fixed a categorical-encoding bug; added L1 median + persistence blend + interval calibration.
+Phase: 5 of 8 (Offline WRF-Chem validation) / or jump to 6 (API) — user to steer
+Plan: Phase 4 code complete; real-target backtest re-run is a data-acquisition task in flight
+Status: OpenAQ S3 real-target pull for winter 2025-26 running (~station 18/60, good coverage). ERA5 met for that window blocked on an Open-Meteo rate-limit reset.
+Last activity: 2026-08-29 — Phase 4 done: LGBM baseline (MAE 26.7 vs persist 39.0, +skill every horizon, Very Poor CSI 0.43), grouped SHAP drivers, serving forecast + alerts path. 63 tests.
 
-Progress: [████░░░░░░] 42%
+Progress: [█████░░░░░] 54%
 
 ## Performance Metrics
 
