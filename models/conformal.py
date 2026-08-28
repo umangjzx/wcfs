@@ -20,7 +20,7 @@ def cqr_margins(
     q_hi: np.ndarray,
     horizon: np.ndarray,
     *,
-    alpha: float = 0.20,
+    alpha: float = 0.15,  # target ~85% on the calibration split -> ~80% out-of-sample
     min_per_bin: int = 40,
 ) -> dict[str, float]:
     """Return {"<horizon>": margin, "_global": margin}. Falls back to the global

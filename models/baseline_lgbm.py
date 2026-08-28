@@ -145,10 +145,11 @@ def train_target(
     sup, cols = make_supervised(feat, horizons, target=target, base_stride_h=base_stride_h)
     sup, cat = encode_categoricals(sup, cols)
 
-    # time-ordered split: tail slice held out for conformal calibration
-    cut = sup["ts"].quantile(1 - _CAL_FRACTION)
-    fit = sup[sup["ts"] <= cut]
-    cal = sup[sup["ts"] > cut]
+    # random holdout for conformal calibration — keeps the fitters' full temporal
+    # coverage (a time-tail split biased the median toward the high season).
+    rng = np.random.default_rng(2026)
+    is_cal = rng.random(len(sup)) < _CAL_FRACTION
+    fit, cal = sup[~is_cal], sup[is_cal]
     Xf, yf = fit[cols], fit["target"].to_numpy("float64")
 
     params = dict(_LGB_PARAMS)
