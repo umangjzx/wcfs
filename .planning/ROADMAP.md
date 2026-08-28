@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: LightGBM multi-horizon quantile baseline + backtest harness
+- [~] 04-01: LightGBM multi-horizon quantile baseline + backtest harness (code done + synthetic-tested; real-data backtest numbers pending — slow training box + OpenAQ target swap)
 - [ ] 04-02: TFT model + SHAP + model registry
 
 ### Phase 5: Offline WRF-Chem validation artifact

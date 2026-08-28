@@ -16,32 +16,53 @@ import pandas as pd
 
 DEFAULT_HORIZONS = [1, 2, 3, 6, 9, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72]
 
-CATEGORICAL = ["station_id", "site_type", "city", "aqi_dominant",
-               "local_hour", "local_dow", "local_month", "is_weekend", "is_stubble_season"]
+CATEGORICAL = ["station_id", "site_type", "city",
+               "local_hour", "local_month", "is_weekend", "is_stubble_season"]
+
+# Curated model inputs (a subset of the ~160 columns in the feature matrix). Keeps
+# LightGBM fast and interpretable; the full matrix stays available for analysis.
+_MODEL_ALLOW_T0 = [
+    # recent pollutant state / persistence
+    "pm25", "pm10", "no2", "aqi", "aqi_inst",
+    "pm25_lag1", "pm25_lag3", "pm25_lag6", "pm25_lag12", "pm25_lag24",
+    "pm25_roll6", "pm25_roll24", "pm25_tend_6h", "pm25_tend_24h",
+    "pm10_lag6", "no2_lag6", "aqi_lag24",
+    # coupled features (the point of the project)
+    "isi", "isi_pbl", "isi_stagnation", "isi_theta", "self_trapping",
+    "ventilation_index", "pbl_height", "dtheta_surface",
+    "incoming_stubble_load", "stubble_index", "plume_from_bearing_deg",
+    "fire_frp_active", "nearest_fire_km",
+    "aod_proxy", "aod_proxy_lag24", "radiative_dimming", "pbl_suppression",
+    "pm25_x_blh_lag24",
+    # meteorology now
+    "t2m", "d2m", "rh2m", "blh", "wind_speed10", "wind_u10", "wind_v10",
+    "wind_u850", "wind_v850", "surface_pressure", "precip", "solar", "cloud",
+    "blh_lag24", "wind_speed10_lag24", "t2m_lag24", "isi_lag24",
+    # calendar / static
+    "local_hour", "local_month", "is_weekend", "is_stubble_season",
+    "hour_sin", "hour_cos", "doy_sin", "doy_cos",
+    "days_into_stubble_season", "diwali_proximity",
+    "station_id", "site_type", "city", "lat", "lon",
+]
+_MODEL_ALLOW_FUTURE = [
+    "blh", "t2m", "rh2m", "wind_speed10", "wind_u10", "wind_v10",
+    "wind_u850", "wind_v850", "precip", "solar", "cloud",
+    "isi", "isi_pbl", "isi_stagnation", "ventilation_index",
+    "incoming_stubble_load", "stubble_index",
+    "hour_sin", "hour_cos", "doy_sin", "doy_cos", "is_weekend",
+    "diwali_proximity", "is_stubble_season", "days_into_stubble_season",
+]
 
 # columns never used as model inputs
 _EXCLUDE = {"ts", "ts0", "aqi_category", "kind", "source", "lead_h"}
 
 # "known future" columns carried at t0+h
-FUTURE_COLS = [
-    "t2m", "d2m", "rh2m", "wind_speed10", "wind_u10", "wind_v10", "wind_u850", "wind_v850",
-    "surface_pressure", "precip", "solar", "cloud", "blh",
-    "isi", "isi_pbl", "isi_stagnation", "ventilation_index",
-    "incoming_stubble_load", "stubble_index", "plume_u", "plume_v",
-    "hour_sin", "hour_cos", "doy_sin", "doy_cos", "is_weekend", "diwali_proximity",
-    "is_stubble_season", "days_into_stubble_season",
-]
+FUTURE_COLS = _MODEL_ALLOW_FUTURE
 
 
 def feature_columns(feat: pd.DataFrame) -> list[str]:
-    """Numeric + categorical columns from the feature matrix usable as X at t0."""
-    cols = []
-    for c in feat.columns:
-        if c in _EXCLUDE:
-            continue
-        if c in CATEGORICAL or pd.api.types.is_numeric_dtype(feat[c]):
-            cols.append(c)
-    return cols
+    """Curated t0 model inputs that exist in this feature matrix."""
+    return [c for c in _MODEL_ALLOW_T0 if c in feat.columns]
 
 
 def make_supervised(
@@ -79,14 +100,17 @@ def make_supervised(
     return sup, model_cols
 
 
-def encode_categoricals(df: pd.DataFrame, cols: list[str]) -> tuple[pd.DataFrame, list[str]]:
-    """Return a copy with categorical columns as pandas 'category' dtype (LightGBM-ready)."""
+def encode_categoricals(df: pd.DataFrame, cols: list[str] | None = None
+                        ) -> tuple[pd.DataFrame, list[str]]:
+    """Cast the *categorical* columns among ``cols`` (default: all) to pandas 'category'.
+
+    Only names in ``CATEGORICAL`` are ever converted — everything else stays numeric.
+    """
     out = df.copy()
-    present = []
-    for c in cols:
-        if c in out.columns:
-            out[c] = out[c].astype("category")
-            present.append(c)
+    candidates = cols if cols is not None else out.columns
+    present = [c for c in candidates if c in out.columns and c in CATEGORICAL]
+    for c in present:
+        out[c] = out[c].astype("category")
     return out, present
 
 
