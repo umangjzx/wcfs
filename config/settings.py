@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     data_gov_in_api_key: str | None = None
     firms_map_key: str | None = None
+    openaq_api_key: str | None = None
     cdsapi_url: str | None = None
     cdsapi_key: str | None = None
     open_meteo_api_key: str | None = None
