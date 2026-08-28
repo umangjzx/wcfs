@@ -39,10 +39,12 @@ Progress: [██████████] 100%
 | 7 React/MapLibre dashboard | Complete |
 | 8 Packaging | Complete |
 
-## Backtest (real CPCB winter 2025-26, 2-fold walk-forward, 492k forecasts)
+## Backtest (real CPCB winter 2025-26, 2-fold walk-forward, 492k forecasts) — post-upgrade
 
-MAE 39.9 vs persistence 54.0 vs climatology 62.8 · bias −2.0 · positive skill every horizon 2h+ ·
-Very Poor (AQI≥301) POD 0.72 / FAR 0.33 / CSI 0.53 · Severe still weak (CSI 0.10) · P10–P90 coverage 64%.
+MAE **37.2** vs persistence 54.0 vs climatology 62.8 · bias +4.2 · **positive skill at every horizon 1h–72h** (+0.02…+0.40) ·
+Very Poor (AQI≥301) **POD 0.96 / CSI 0.55** · Severe (AQI≥401) **POD 0.39 / CSI 0.17** (was 0.11/0.10) ·
+P10–P90 conformal coverage 72% (target 80%; alpha 0.15) · AQI category acc 48%.
+Weighting/split history: over-weight → +38 bias; time-split → +26 bias; **P90-only weight + random conformal split → +4.2**.
 
 ## Accumulated Context
 

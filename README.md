@@ -18,13 +18,16 @@ offline **WRF-Chem** run grounds the emulator in the real coupled physics.
 
 | | MAE | RMSE | bias |
 | --- | --- | --- | --- |
-| **VayuCast** | **39.9 µg/m³** | **57.6** | **−2.0** |
+| **VayuCast** | **37.2 µg/m³** | **54.8** | **+4.2** |
 | Persistence | 54.0 | 80.5 | +2.0 |
 | Hour-of-year climatology | 62.8 | 85.2 | +17.3 |
 
-- Positive skill vs persistence at **every horizon 2 h – 72 h** (+0.06 → +0.36)
-- **"Very Poor" (AQI ≥ 301) episode detection: POD 0.72 / FAR 0.33 / CSI 0.53** (persistence CSI 0.43)
+- Positive skill vs persistence at **every horizon 1 h – 72 h** (+0.02 → +0.40)
+- **"Very Poor" (AQI ≥ 301) episode detection: POD 0.96 / FAR 0.44 / CSI 0.55** (persistence CSI 0.43)
+- **"Severe" (AQI ≥ 401): POD 0.39 / CSI 0.17** (persistence CSI 0.10) — decided on a ~P75 event score, not the median
+- P10–P90 interval calibrated by split-conformal (CQR): 72% empirical coverage (80% target)
 - Coupling shows in the data: `corr(ISI × aerosol, PM2.5) = +0.51`; ISI diurnal cycle 0.66 pre-dawn → 0.12 mid-afternoon
+- Model: PM2.5 + PM10 + NO₂ LightGBM emulators → real CPCB AQI; 299-feature matrix; `models.train` / `models.backtest` (or `notebooks/train_colab.ipynb` on a T4)
 
 ## Architecture
 
