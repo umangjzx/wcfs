@@ -6,6 +6,7 @@ load) as the known-future inputs. Output is what the API serves.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from aqi.cpcb_aqi import aqi_category, health_advisory
@@ -49,6 +50,46 @@ def forecast(
             "pm25_p10", "pm25_p50", "pm25_p90", "aqi", "category", "advisory",
             "dominant_pollutant"]
     return pred[cols].sort_values(["station_id", "horizon"]).reset_index(drop=True)
+
+
+_DELHI_WINTER_DIURNAL = np.array([  # relative PM2.5 by local hour (peak pre-dawn / evening)
+    1.18, 1.22, 1.24, 1.25, 1.24, 1.20, 1.10, 0.95, 0.82, 0.74, 0.70, 0.70,
+    0.72, 0.74, 0.76, 0.80, 0.88, 1.00, 1.10, 1.15, 1.16, 1.16, 1.16, 1.17,
+])
+
+
+def naive_forecast(feat_serving: pd.DataFrame, *, horizon_h: int = FORECAST_HORIZON_HOURS
+                   ) -> pd.DataFrame:
+    """Persistence-to-diurnal-climatology fallback when no trained model is available."""
+    from aqi.cpcb_aqi import aqi_category, health_advisory, sub_index_series
+    from ingest.common import IST
+
+    base = _latest_base_rows(feat_serving)
+    rows = []
+    for _, b in base.iterrows():
+        t0 = pd.Timestamp(b["ts"]).tz_convert("UTC")
+        pm0 = float(b["pm25"])
+        h0 = t0.tz_convert(IST).hour
+        anchor = pm0 / _DELHI_WINTER_DIURNAL[h0]
+        for h in range(1, horizon_h + 1):
+            vt = t0 + pd.Timedelta(hours=h)
+            hh = vt.tz_convert(IST).hour
+            decay = np.exp(-h / 30.0)
+            p50 = decay * pm0 + (1 - decay) * anchor * _DELHI_WINTER_DIURNAL[hh]
+            spread = 0.35 * p50 * (1 - decay) + 6
+            rows.append({
+                "station_id": b["station_id"], "issued_ts": t0, "valid_ts": vt, "horizon": h,
+                "pm25_p10": max(p50 - spread, 0), "pm25_p50": p50, "pm25_p90": p50 + spread,
+            })
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["aqi"] = sub_index_series("PM2.5", df["pm25_p50"].to_numpy()).round()
+    df["aqi"] = df["aqi"].astype("Int64")
+    df["category"] = df["aqi"].map(lambda a: aqi_category(a) if pd.notna(a) else "Unknown")
+    df["advisory"] = df["category"].map(health_advisory)
+    df["dominant_pollutant"] = "PM2.5"
+    return df.sort_values(["station_id", "horizon"]).reset_index(drop=True)
 
 
 def peak_alerts(forecast_df: pd.DataFrame, thresholds: dict[str, int] | None = None) -> list[dict]:
