@@ -1,0 +1,1 @@
+"""VayuCast FastAPI service."""
