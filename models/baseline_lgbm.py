@@ -122,8 +122,17 @@ class LGBMForecaster:
 
 
 def _sample_weight(y: np.ndarray) -> np.ndarray:
-    """Up-weight high-pollution rows so Very Poor / Severe episodes aren't averaged away."""
-    return np.clip(1.0 + (np.clip(y, 0, None) / 120.0) ** 1.6, 1.0, 8.0)
+    """Mild up-weighting of high-pollution rows for the UPPER quantile only.
+
+    The L1 median is left unweighted (keeps MAE + bias honest); the P90 booster gets
+    this so the interval and the P75 event-decision score reach into episode peaks.
+    """
+    return np.clip(1.0 + (np.clip(y, 0, None) / 220.0) ** 1.5, 1.0, 3.0)
+
+
+def event_score(p50: np.ndarray, p90: np.ndarray, frac: float = 0.35) -> np.ndarray:
+    """~P75 decision score for 'will AQI exceed a threshold' — not a biased point forecast."""
+    return np.asarray(p50) + frac * np.maximum(np.asarray(p90) - np.asarray(p50), 0.0)
 
 
 def train_target(
@@ -141,18 +150,18 @@ def train_target(
     fit = sup[sup["ts"] <= cut]
     cal = sup[sup["ts"] > cut]
     Xf, yf = fit[cols], fit["target"].to_numpy("float64")
-    w = _sample_weight(yf)
 
     params = dict(_LGB_PARAMS)
     if num_boost:
         params["n_estimators"] = num_boost
 
     models: dict = {}
-    m = lgb.LGBMRegressor(objective="regression_l1", **params)
-    m.fit(Xf, yf, sample_weight=w, categorical_feature=cat)
+    m = lgb.LGBMRegressor(objective="regression_l1", **params)   # median: unweighted
+    m.fit(Xf, yf, categorical_feature=cat)
     models["median"] = m
     for q in (0.1, 0.9):
         est = lgb.LGBMRegressor(objective="quantile", alpha=q, **params)
+        w = _sample_weight(yf) if q == 0.9 else None              # only P90 leans into peaks
         est.fit(Xf, yf, sample_weight=w, categorical_feature=cat)
         models[float(q)] = est
 

@@ -123,15 +123,19 @@ def summarize(df: pd.DataFrame) -> dict:
             "skill_vs_persist": round(1 - np.mean(np.abs(e_m)) / max(np.mean(np.abs(e_p)), 1e-6), 3),
         }
 
+    from models.baseline_lgbm import event_score
+
     y_aqi = sub_index_series("PM2.5", y)
-    p_aqi = sub_index_series("PM2.5", df["pm25_p50"].to_numpy())  # consistent w/ PM2.5-only obs
+    p_aqi = sub_index_series("PM2.5", df["pm25_p50"].to_numpy())  # category acc uses the median
+    ev_aqi = sub_index_series("PM2.5", event_score(
+        df["pm25_p50"].to_numpy(), df["pm25_p90"].to_numpy()))   # ~P75 event-decision score
     valid = np.isfinite(y_aqi) & np.isfinite(p_aqi)
     out["overall"]["aqi_category_acc"] = round(float(np.mean(
         [aqi_category(a) == aqi_category(b) for a, b in zip(p_aqi[valid], y_aqi[valid], strict=False)]
     )), 3)
     for ev, thr in _EVENTS.items():
         out["events"][ev] = {
-            "model": _event_scores(p_aqi >= thr, y_aqi >= thr),
+            "model": _event_scores(ev_aqi >= thr, y_aqi >= thr),
             "persistence": _event_scores(
                 sub_index_series("PM2.5", df["persist"].to_numpy()) >= thr, y_aqi >= thr),
         }

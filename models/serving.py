@@ -95,20 +95,27 @@ def naive_forecast(feat_serving: pd.DataFrame, *, horizon_h: int = FORECAST_HORI
 
 def peak_alerts(forecast_df: pd.DataFrame, thresholds: dict[str, int] | None = None) -> list[dict]:
     """Soonest crossing of each AQI threshold per station, for the alerts banner."""
+    from aqi.cpcb_aqi import sub_index_series
     from config.settings import ALERT_THRESHOLDS
+    from models.baseline_lgbm import event_score
 
     thresholds = thresholds or ALERT_THRESHOLDS
     if forecast_df.empty:
         return []
+    f = forecast_df.copy()
+    # alert on the ~P75 event-decision score, not the median (precision/recall for hazards)
+    f["_ev_aqi"] = sub_index_series(
+        "PM2.5", event_score(f["pm25_p50"].to_numpy(), f["pm25_p90"].to_numpy()))
     alerts = []
-    for sid, g in forecast_df.groupby("station_id"):
+    for sid, g in f.groupby("station_id"):
         g = g.sort_values("horizon")
         for label, thr in thresholds.items():
-            hit = g[g["aqi"].fillna(0) >= thr]
+            hit = g[g["_ev_aqi"].fillna(0) >= thr]
             if not hit.empty:
                 r = hit.iloc[0]
                 alerts.append({
                     "station_id": sid, "level": label, "lead_hours": int(r["horizon"]),
-                    "valid_ts": r["valid_ts"].isoformat(), "aqi": int(r["aqi"]),
+                    "valid_ts": r["valid_ts"].isoformat(),
+                    "aqi": int(r["aqi"]) if pd.notna(r["aqi"]) else int(r["_ev_aqi"]),
                 })
     return sorted(alerts, key=lambda a: (a["lead_hours"], -a["aqi"]))
