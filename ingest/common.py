@@ -162,3 +162,30 @@ def to_utc(series: pd.Series, assume_tz: ZoneInfo = IST) -> pd.Series:
 
 def empty_obs() -> pd.DataFrame:
     return pd.DataFrame(columns=OBS_COLUMNS)
+
+
+# Physically plausible ranges (ug/m3; CO in mg/m3). CPCB feeds use -999/-9999 as
+# missing sentinels and occasionally emit sensor-fault spikes.
+PLAUSIBLE_RANGE = {
+    "PM2.5": (1.0, 1500.0),
+    "PM10": (1.0, 3000.0),
+    "NO2": (0.1, 800.0),
+    "O3": (0.1, 900.0),
+    "SO2": (0.1, 2000.0),
+    "CO": (0.01, 60.0),
+    "NH3": (0.1, 3000.0),
+}
+
+
+def sanitize_observations(obs: pd.DataFrame) -> pd.DataFrame:
+    """Drop out-of-range / sentinel pollutant values (keeps the long OBS schema)."""
+    if obs.empty:
+        return obs
+    o = obs.copy()
+    o["value"] = pd.to_numeric(o["value"], errors="coerce")
+    lo = o["pollutant"].map(lambda p: PLAUSIBLE_RANGE.get(p, (None, None))[0])
+    hi = o["pollutant"].map(lambda p: PLAUSIBLE_RANGE.get(p, (None, None))[1])
+    keep = o["value"].notna()
+    keep &= lo.isna() | (o["value"] >= lo)
+    keep &= hi.isna() | (o["value"] <= hi)
+    return o[keep].reset_index(drop=True)

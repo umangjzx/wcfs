@@ -23,7 +23,7 @@ from features.calendar_feats import CALENDAR_FEATURE_COLUMNS, add_calendar_featu
 from features.feedback import FEEDBACK_FEATURE_COLUMNS, compute_feedback_features
 from features.inversion import INVERSION_FEATURE_COLUMNS, compute_inversion_features
 from features.stubble import STUBBLE_FEATURE_COLUMNS, compute_stubble_features
-from ingest.common import read_table
+from ingest.common import read_table, sanitize_observations
 
 POLLUTANT_COLS = {
     "PM2.5": "pm25", "PM10": "pm10", "NO2": "no2", "O3": "o3",
@@ -50,7 +50,7 @@ def pivot_observations(obs_long: pd.DataFrame) -> pd.DataFrame:
     """Long (station_id, ts, pollutant, value) -> wide with lowercase pollutant columns, hourly."""
     if obs_long.empty:
         return pd.DataFrame(columns=["station_id", "ts", *POLLUTANT_COLS.values()])
-    o = obs_long.copy()
+    o = sanitize_observations(obs_long)
     o["ts"] = pd.to_datetime(o["ts"], utc=True).dt.floor("h")
     o["pollutant"] = o["pollutant"].map(POLLUTANT_COLS)
     o = o.dropna(subset=["pollutant"])

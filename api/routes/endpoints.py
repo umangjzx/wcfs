@@ -133,10 +133,10 @@ def fires():
     d = df.copy()
     d["date"] = pd.to_datetime(d["date"])
     recent = d[d["date"] >= d["date"].max() - pd.Timedelta(days=2)]
-    clusters = [{"lat": round(float(r.lat), 3), "lon": round(float(r.lon), 3),
-                 "frp_sum": round(float(r.frp_sum), 1), "count": int(r["count"]),
-                 "date": pd.Timestamp(r.date).date().isoformat()}
-                for r in recent.itertuples()]
+    clusters = [{"lat": round(float(r["lat"]), 3), "lon": round(float(r["lon"]), 3),
+                 "frp_sum": round(float(r["frp_sum"]), 1), "count": int(r["count"]),
+                 "date": pd.Timestamp(r["date"]).date().isoformat()}
+                for r in recent.to_dict("records")]
     # aggregate plume vector from the drivers cache (mean over stations)
     bs, ls = [], []
     for dd in STATE.drivers.values():

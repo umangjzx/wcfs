@@ -33,6 +33,7 @@ from ingest.common import (
     get_json,
     http_get,
     merge_observations,
+    sanitize_observations,
     write_table,
 )
 
@@ -316,7 +317,7 @@ def fetch_history_s3(
     if not frames:
         return pd.DataFrame(columns=OBS_COLUMNS), SourceResult(
             "openaq:s3", ok=False, message=f"no archive data ({n_files} files) {start}..{end}")
-    obs = merge_observations(*frames)
+    obs = sanitize_observations(merge_observations(*frames))
     return obs, SourceResult("openaq:s3", ok=True, rows=len(obs),
                              message=f"{obs['station_id'].nunique()} stations, "
                                      f"{n_files} day-files, {start}..{end}")

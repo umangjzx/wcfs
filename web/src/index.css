@@ -1,0 +1,177 @@
+/* VayuCast — design tokens from design-system/vayucast/MASTER.md
+   Dark OLED operations dashboard · density 8 · subtle motion */
+:root {
+  --color-primary: #16a34a;
+  --color-on-primary: #000000;
+  --color-secondary: #22c55e;
+  --color-accent: #dc2626;
+  --color-on-accent: #ffffff;
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #111827;
+  --color-card-foreground: #f8fafc;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #cbd5e1;
+  --color-border: #334155;
+  --color-ring: #16a34a;
+
+  /* CPCB National AQI category scale */
+  --aqi-good: #16a34a;
+  --aqi-satisfactory: #84cc16;
+  --aqi-moderate: #eab308;
+  --aqi-poor: #f97316;
+  --aqi-very-poor: #dc2626;
+  --aqi-severe: #7f1d1d;
+  --aqi-unknown: #475569;
+
+  --font-body: "Fira Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --radius: 10px;
+  --transition: 180ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.mono {
+  font-family: var(--font-mono);
+}
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted-foreground);
+  margin: 0 0 var(--space-3);
+}
+a {
+  color: var(--color-secondary);
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+  color: var(--color-foreground);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: background var(--transition), border-color var(--transition);
+}
+button:hover {
+  background: #253247;
+}
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+button[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: rgba(22, 163, 74, 0.15);
+}
+
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--color-muted-foreground);
+}
+.mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.fade-in {
+  animation: fade-in 320ms ease both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+  * {
+    transition: none !important;
+  }
+}
+
+/* scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 8px;
+}
+
+.maplibregl-popup-content {
+  background: var(--color-card);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  padding: 8px 10px;
+}
+.maplibregl-popup-tip {
+  border-top-color: var(--color-card) !important;
+  border-bottom-color: var(--color-card) !important;
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: rgba(15, 23, 42, 0.7) !important;
+}
