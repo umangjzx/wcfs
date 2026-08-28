@@ -11,7 +11,7 @@ refresh, then build the React/MapLibre dashboard and package it for the demo.
 ## Phases
 
 - [x] **Phase 1: Scaffold & workflow bootstrap** - Repo skeleton, gsd-core planning artifacts, station + settings config
-- [ ] **Phase 2: Data ingestion** - CPCB, ERA5, GFS, FIRMS ingest to Parquet/DuckDB
+- [x] **Phase 2: Data ingestion** - CPCB, ERA5, GFS, FIRMS ingest to Parquet/DuckDB
 - [ ] **Phase 3: AQI + coupled feature engineering** - CPCB AQI, Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback
 - [ ] **Phase 4: ML forecasting model + backtest** - LightGBM baseline → TFT, walk-forward CV, SHAP
 - [ ] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: CPCB real-time + historical (OpenAQ/CCR) + station registry
-- [ ] 02-02: ERA5 (cdsapi), GFS (NOMADS), FIRMS + orchestrator
+- [x] 02-01: CPCB real-time + historical (OpenAQ/CAMS) + station registry
+- [x] 02-02: ERA5 + GFS (ingest/weather.py, Open-Meteo), FIRMS + run_ingest orchestrator
 
 ### Phase 3: AQI + coupled feature engineering
 **Goal**: A per-station hourly feature matrix that encodes the met–chem coupling.
@@ -153,8 +153,8 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold & workflow bootstrap | 1/1 | Complete | 2026-08-28 |
-| 2. Data ingestion | 0/2 | Not started | - |
-| 3. AQI + coupled feature engineering | 0/2 | Not started | - |
+| 2. Data ingestion | 2/2 | Complete | 2026-08-28 |
+| 3. AQI + coupled feature engineering | 0/2 | In progress | - |
 | 4. ML forecasting model + backtest | 0/2 | Not started | - |
 | 5. Offline WRF-Chem validation artifact | 0/1 | Not started | - |
 | 6. Backend API | 0/2 | Not started | - |

@@ -3,10 +3,10 @@ gsd_state_version: '1.0'
 status: in_progress
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
-  completed_plans: 1
-  percent: 8
+  completed_plans: 3
+  percent: 23
 ---
 
 # Project State
@@ -16,59 +16,52 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-28)
 
 **Core value:** A trustworthy, explainable 72-hour Delhi-NCR AQI forecast that visibly accounts for the inversion ↔ aerosol feedback loop.
-**Current focus:** Phase 2 — Data ingestion
+**Current focus:** Phase 3 — AQI + coupled feature engineering
 
 ## Current Position
 
-Phase: 2 of 8 (Data ingestion)
-Plan: 1 of 2 in current phase (02-01: CPCB real-time + historical + station registry)
-Status: Ready to plan
-Last activity: 2026-08-28 — Phase 1 complete: repo skeleton, .planning artifacts, 52-station NCR registry, settings, CPCB AQI module (36 tests pass, ruff clean), git initialized
+Phase: 3 of 8 (AQI + coupled feature engineering)
+Plan: 1 of 2 (03-01: CPCB AQI module — already built in Phase 1; 03-02: ISI, stubble vector, feedback, builder)
+Status: Ready to build 03-02
+Last activity: 2026-08-28 — Phase 2 complete. Ingestion live-verified: CPCB 420 obs/65 stations, GFS +77h/65 stations, ERA5 reanalysis 65 stations. FIRMS wired, needs map key.
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [██░░░░░░░░] 23%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
+- Total plans completed: 3
 - Average duration: —
-- Total execution time: —
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1. Scaffold | 1/1 | — | — |
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 1. Scaffold | 1/1 | Complete |
+| 2. Data ingestion | 2/2 | Complete |
 
 ## Accumulated Context
 
 ### Decisions
 
-Logged in PROJECT.md Key Decisions table. Recent:
-
-- Setup: Fast ML emulator serves live forecasts; WRF-Chem offline-validation only (per SIH research guide)
-- Setup: Coupling encoded as engineered features (ISI, stubble-plume vector, aerosol→PBL)
-- **Phase 1 refinement**: ERA5 history + GFS forecast pulled via the **Open-Meteo JSON API** (no key, cross-platform) as the default; `cdsapi`/GRIB kept as an optional `gridded` extra for high fidelity. Reason: cdsapi queue times + GRIB/eccodes on Windows are hackathon killers; Open-Meteo serves genuine ERA5 + GFS incl. boundary_layer_height as plain JSON.
-- Setup: React + Vite + MapLibre dashboard; DuckDB + Parquet storage
+- ERA5 history + GFS forecast via **Open-Meteo JSON** (keyless, cross-platform); `cdsapi` optional. Both confirmed to serve `boundary_layer_height` + 1000/925/850 hPa temps.
+- Merged planned `era5.py` + `gfs.py` into one `ingest/weather.py` (`fetch_reanalysis` / `fetch_forecast`) — same API, DRY.
+- Station registry **regenerated from the live data.gov.in CPCB feed** (`ingest/stations_build.py`): 65 NCR stations, authoritative names + coords (`coords_verified: true`). id scheme `DEL-…` etc.
+- data.gov.in key provided by user (was labelled `MARKET_API_KEY`) — verified against the CPCB resource, wired as `DATA_GOV_IN_API_KEY` in `.env`.
+- Wind decomposed to u/v with meteorological "FROM" convention in `ingest/weather.py`.
 
 ### Pending Todos
 
-- Verify hand-seeded station coordinates against the live data.gov.in payload (`cpcb.py --sync-stations`) — flip `coords_verified` once matched.
+- **FIRMS_MAP_KEY** still needed (free, instant) — stubble-plume feature depends on it. Without it `ingest.firms` degrades to snapshot/empty.
+- **OpenAQ v3** ground-truth historical path is a TODO in `ingest/cpcb.fetch_history` — currently returns Open-Meteo CAMS model output (fine to build/demo; swap for OpenAQ when key present for real training targets).
+- `WEATHER_API_KEY` + `OPENROUTER_*` stored in `.env`, not wired in. OpenRouter = candidate for LLM-generated advisories later (billing — ask first).
 
 ### Blockers/Concerns
 
-- API keys (data.gov.in, NASA FIRMS) not yet registered — ingestion must run against cached snapshots until then. Open-Meteo needs none.
-- WRF-Chem run (Phase 5) needs a cloud VM; fallback is the published GMD DSS v1.0 comparison.
-- Initial scaffold is staged in git but **not committed** — awaiting user go-ahead on commits.
-
-## Deferred Items
-
-| Category | Item | Status | Deferred At | Milestone |
-|----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+- Training-target quality: CAMS proxy vs CPCB ground truth — resolve before Phase 4 training if OpenAQ key arrives.
 
 ## Session Continuity
 
 Last session: 2026-08-28
-Stopped at: Phase 1 complete; staged (not committed). Next: Phase 2 plan 02-01 — CPCB ingest.
+Stopped at: Phase 2 complete (commit pending). Next: Phase 3 / 03-02 — features/inversion.py, features/stubble.py, features/feedback.py, features/build.py.
 Resume file: None
