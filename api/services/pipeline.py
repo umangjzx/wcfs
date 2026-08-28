@@ -80,8 +80,14 @@ def _load_model():
     return None, "naive"
 
 
-def _snapshot_paths():
+_REPO_ROOT = SETTINGS.data_dir.parent
+
+
+def _snapshot_paths(read: bool = False):
     d = SETTINGS.snapshots_dir
+    # for reads, fall back to the committed demo seed if no live snapshot exists yet
+    if read and not (d / "api_meta.json").exists() and (_REPO_ROOT / "demo" / "snapshot" / "api_meta.json").exists():
+        d = _REPO_ROOT / "demo" / "snapshot"
     return {
         "forecast": d / "api_forecast.parquet",
         "observations": d / "api_obs.parquet",
@@ -106,7 +112,7 @@ def _save_snapshot() -> None:
 
 
 def load_snapshot() -> bool:
-    p = _snapshot_paths()
+    p = _snapshot_paths(read=True)
     if not p["meta"].exists():
         return False
     try:

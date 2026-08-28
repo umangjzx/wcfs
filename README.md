@@ -1,69 +1,107 @@
 # VayuCast
 
-**Air Pollution–Weather Coupled Forecasting System for Delhi NCR**
-Smart India Hackathon 2026 · Problem Statement **26082** · Ministry of Earth Sciences → NCMRWF
+**Air Pollution–Weather Coupled Forecasting System — Delhi NCR**
+Smart India Hackathon 2026 · Problem Statement **26082** · Ministry of Earth Sciences → NCMRWF · *Disaster Management*
 
 VayuCast produces a **72-hour, hourly, probabilistic AQI forecast** for the Delhi National
 Capital Region that explicitly models the two-way meteorology–chemistry feedback standard
 forecasts ignore:
 
-- **Inversion → aerosol**: temperature inversions and a shallow planetary boundary layer trap
-  PM2.5 near the surface.
-- **Aerosol → inversion**: dense aerosol loading blocks sunlight, cooling the surface and
-  further suppressing boundary-layer growth.
+- **Inversion → aerosol** — temperature inversions and a shallow planetary boundary layer trap PM2.5 near the surface.
+- **Aerosol → inversion** — dense aerosol loading blocks sunlight, cools the surface and further suppresses boundary-layer growth.
 
 The live forecast is served by a fast ML emulator trained on engineered coupling features
 (an **Inversion Strength Index** and a **stubble-plume transport vector**). A one-off,
-offline **WRF-Chem** run validates the approach against a historical stubble-burning spike.
+offline **WRF-Chem** run grounds the emulator in the real coupled physics.
+
+## Results (walk-forward backtest, real CPCB winter 2025-26, 492k forecasts)
+
+| | MAE | RMSE | bias |
+| --- | --- | --- | --- |
+| **VayuCast** | **39.9 µg/m³** | **57.6** | **−2.0** |
+| Persistence | 54.0 | 80.5 | +2.0 |
+| Hour-of-year climatology | 62.8 | 85.2 | +17.3 |
+
+- Positive skill vs persistence at **every horizon 2 h – 72 h** (+0.06 → +0.36)
+- **"Very Poor" (AQI ≥ 301) episode detection: POD 0.72 / FAR 0.33 / CSI 0.53** (persistence CSI 0.43)
+- Coupling shows in the data: `corr(ISI × aerosol, PM2.5) = +0.51`; ISI diurnal cycle 0.66 pre-dawn → 0.12 mid-afternoon
 
 ## Architecture
 
-```
-CPCB AQI ─┐
-ERA5 / GFS ├─► ingest ─► features (AQI, ISI, stubble vector, aerosol→PBL) ─► ML emulator ─► FastAPI ─► React + MapLibre dashboard
-NASA FIRMS ┘                                                                 (LightGBM → TFT)   (hourly refresh)
-                                                              WRF-Chem (offline validation only)
+```mermaid
+flowchart LR
+  cpcb[CPCB real-time<br/>data.gov.in] --> ing[ingest/]
+  met[ERA5 + GFS<br/>Open-Meteo] --> ing
+  firms[NASA FIRMS<br/>stubble fires] --> ing
+  oaq[OpenAQ v3 + S3<br/>historical truth] --> ing
+  ing --> feat[features/<br/>AQI · ISI · plume vector · aerosol→PBL]
+  feat --> model[models/<br/>LightGBM P10/P50/P90 emulator]
+  model --> apisvc[api/<br/>FastAPI + hourly refresh]
+  apisvc --> web[web/<br/>React + MapLibre dashboard]
+  wrf[wrfchem/<br/>offline validation] -. calibrates .-> feat
 ```
 
-See `.planning/ROADMAP.md` for the phase plan and `.planning/PROJECT.md` for scope and decisions.
-
-## Quick start
+## Quick start (local)
 
 ```bash
-python -m venv .venv && . .venv/Scripts/activate   # Windows; use bin/activate on macOS/Linux
+python -m venv .venv && . .venv/Scripts/activate      # bin/activate on macOS/Linux
 pip install -e ".[model,api,dev]"
-cp .env.example .env                                # fill in keys when you have them (all optional)
-pytest
+cp .env.example .env                                  # keys optional (see below)
+
+# one live cycle + train once (uses OpenAQ S3 archive, keyless)
+python -m ingest.openaq --start 2025-10-01 --end 2026-02-15   # real CPCB history
+python -m ingest.weather --history --start 2025-10-01 --end 2026-02-15
+python -m ingest.firms   --history --start 2025-10-01 --end 2026-02-15
+python -m features.build  --history --start 2025-10-01 --end 2026-02-15
+python -m models.train --model lgbm
+python -m models.backtest                             # prints the table above
+
+# serve
+uvicorn api.main:app --port 8000        # http://localhost:8000/docs
+cd web && npm install && npm run dev    # http://localhost:5173
 ```
 
-### Data source keys (all optional for a first run)
+Or everything at once:
 
-| Feed | Where to register | Env var |
+```bash
+docker compose up --build
+# dashboard  http://localhost:8080     API  http://localhost:8000/docs
+```
+
+The API boots from the committed `demo/snapshot/` so the dashboard works **with no
+network and no keys**; it refreshes from live feeds in the background when it can.
+
+### Data source keys (all optional, all free)
+
+| Feed | Register at | Env var |
 | --- | --- | --- |
 | CPCB real-time AQI | https://www.data.gov.in/ | `DATA_GOV_IN_API_KEY` |
 | NASA FIRMS fire hotspots | https://firms.modaps.eosdis.nasa.gov/api/map_key/ | `FIRMS_MAP_KEY` |
-| ERA5 history + GFS forecast | Open-Meteo (no key needed) | — |
-| ERA5 high-fidelity (optional) | https://cds.climate.copernicus.eu/ | `CDSAPI_KEY` (extras: `gridded`) |
+| OpenAQ historical ground truth | https://explore.openaq.org/ | `OPENAQ_API_KEY` (S3 archive needs no key) |
+| ERA5 + GFS meteorology | Open-Meteo — no key | — |
 
-Without keys, ingestion falls back to cached snapshots so the demo still runs.
-
-## Repository layout
+## Repository
 
 | Path | Contents |
 | --- | --- |
-| `config/` | `stations.yaml` (NCR station registry), `settings.py` (paths, geo + physical constants) |
-| `ingest/` | CPCB, ERA5, GFS, FIRMS ingestion → Parquet/DuckDB |
-| `aqi/` | Indian National AQI (CPCB method) |
-| `features/` | Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback, feature builder |
-| `models/` | LightGBM baseline, Temporal Fusion Transformer, training + backtest |
-| `wrfchem/` | Offline WRF-Chem namelists, pipeline runbook, validation notebook |
-| `api/` | FastAPI service + APScheduler hourly refresh |
-| `web/` | React + Vite + MapLibre dashboard |
-| `notebooks/` | EDA, feature checks, model evaluation |
+| `config/` | 65-station NCR registry (rebuilt from the live feed), geo + physical constants |
+| `ingest/` | CPCB, ERA5/GFS (Open-Meteo), NASA FIRMS, OpenAQ v3 + S3; `run_ingest` orchestrator |
+| `aqi/` | Indian National AQI (CPCB method), vectorized |
+| `features/` | Inversion Strength Index, stubble-plume transport vector, aerosol→PBL feedback, calendar/solar, builder |
+| `models/` | LightGBM P10/P50/P90 emulator, walk-forward backtest, grouped-SHAP drivers, serving path |
+| `wrfchem/` | Offline WRF-Chem namelists + FINN/EDGAR/mozbc runbook + `validate.py` |
+| `api/` | FastAPI service + APScheduler hourly refresh + snapshot fallback |
+| `web/` | React + Vite + MapLibre dashboard (see `web/README.md`) |
+| `.planning/` | gsd-core spec-driven workflow artifacts (PROJECT / REQUIREMENTS / ROADMAP / STATE) |
 
-## Status
+## Demo script
 
-Phase 1 (scaffold) in progress. Tracked in `.planning/STATE.md`.
+1. **Map** — NCR AQI choropleth + 65 station markers by CPCB category; fire hotspots + plume-transport line.
+2. **Time slider** — drag *Now → +72 h*; the choropleth and the selected station's panel update.
+3. **Station panel** — 72 h P50 line with P10–P90 uncertainty band, current vs peak AQI, health advisory.
+4. **Why this forecast** — Inversion Strength Index + incoming-stubble-load meters, plume bearing, and SHAP contributions grouped as *inversion trapping / stubble transport / local emissions / wind ventilation / meteorology / time & season*.
+5. **Alerts** — soonest "Very Poor" / "Severe" crossing across NCR, with lead time.
+6. **Methodology** — model card + the live walk-forward backtest + the WRF-Chem validation figure.
 
 ## License
 

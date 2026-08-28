@@ -17,7 +17,7 @@ refresh, then build the React/MapLibre dashboard and package it for the demo.
 - [x] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
 - [x] **Phase 6: Backend API** - FastAPI endpoints + APScheduler hourly refresh + cache
 - [x] **Phase 7: Frontend dashboard** - React + Vite + MapLibre: map, time slider, forecast, drivers, alerts
-- [ ] **Phase 8: Integration, packaging, demo polish** - docker-compose, README, offline snapshot, pitch assets
+- [x] **Phase 8: Integration, packaging, demo polish** - docker-compose, README, offline snapshot, pitch assets
 
 ## Phase Details
 
@@ -143,7 +143,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 08-01: docker-compose, README, snapshot seeding, pitch assets, CI
+- [x] 08-01: docker-compose (api+web+nginx), README + demo script, committed demo/snapshot, CI (py+web), LICENSE
 
 ## Progress
 
@@ -159,4 +159,4 @@ Plans:
 | 5. Offline WRF-Chem validation artifact | 1/1 | Complete | 2026-08-29 |
 | 6. Backend API | 2/2 | Complete | 2026-08-29 |
 | 7. Frontend dashboard | 2/2 | Complete | 2026-08-29 |
-| 8. Integration, packaging, demo polish | 0/1 | Not started | - |
+| 8. Integration, packaging, demo polish | 1/1 | Complete | 2026-08-29 |

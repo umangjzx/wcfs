@@ -1,12 +1,12 @@
 ---
 gsd_state_version: '1.0'
-status: in_progress
+status: shippable
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 8
   total_plans: 13
-  completed_plans: 7
-  percent: 54
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -16,65 +16,60 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-28)
 
 **Core value:** A trustworthy, explainable 72-hour Delhi-NCR AQI forecast that visibly accounts for the inversion ↔ aerosol feedback loop.
-**Current focus:** Phase 4 — ML forecasting model + backtest (04-01 landing)
+**Current focus:** All 8 phases done — polish / stretch items remain (TFT, quantile calibration, per-pollutant AQI).
 
 ## Current Position
 
-Phase: 5 of 8 (Offline WRF-Chem validation) / or jump to 6 (API) — user to steer
-Plan: Phase 4 code complete; real-target backtest re-run is a data-acquisition task in flight
-Status: OpenAQ S3 real-target pull for winter 2025-26 running (~station 18/60, good coverage). ERA5 met for that window blocked on an Open-Meteo rate-limit reset.
-Last activity: 2026-08-29 — Phase 4 done: LGBM baseline (MAE 26.7 vs persist 39.0, +skill every horizon, Very Poor CSI 0.43), grouped SHAP drivers, serving forecast + alerts path. 63 tests.
+Phase: 8 of 8 complete. End-to-end system runs.
+Status: Shippable. Pushed to github.com/umangjzx/wcfs.
+Last activity: 2026-08-29 — Phases 5 (WRF-Chem artifact), 6 (API), 7 (dashboard), 8 (packaging) landed. Dashboard verified in-browser against the live API. Model retrained on real OpenAQ winter 2025-26 data.
 
-Progress: [█████░░░░░] 54%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
-| Phase | Plans | Status |
-|-------|-------|--------|
-| 1. Scaffold | 1/1 | Complete |
-| 2. Data ingestion | 2/2 | Complete |
-| 3. Features | 2/2 | Complete |
-| 4. Model + backtest | ~1/2 | In progress |
+| Phase | Status |
+|-------|--------|
+| 1 Scaffold | Complete |
+| 2 Data ingestion | Complete |
+| 3 Coupled features | Complete |
+| 4 Model + backtest | Complete |
+| 5 WRF-Chem artifact | Complete |
+| 6 FastAPI service | Complete |
+| 7 React/MapLibre dashboard | Complete |
+| 8 Packaging | Complete |
 
-## Backtest snapshot (2-fold walk-forward, Dec 2023–Jan 2024, CAMS targets)
+## Backtest (real CPCB winter 2025-26, 2-fold walk-forward, 492k forecasts)
 
-Post categorical-bug-fix run: MAE 29.9 (persistence 39.0, climatology 33.9);
-**positive skill vs persistence from 6 h onward (+0.24 … +0.41)**; Very Poor CSI 0.32.
-Remaining issues → fixes in flight / next:
-- systematic under-bias (−21) and Severe-event blindness → **CAMS PM2.5 caps ~225; needs real OpenAQ targets**
-- P10–P90 coverage 37% → added interval calibration (`LGBMForecaster.calibrate`)
-- 1–3 h worse than persistence → added persistence blend for h ≤ 6
+MAE 39.9 vs persistence 54.0 vs climatology 62.8 · bias −2.0 · positive skill every horizon 2h+ ·
+Very Poor (AQI≥301) POD 0.72 / FAR 0.33 / CSI 0.53 · Severe still weak (CSI 0.10) · P10–P90 coverage 64%.
 
 ## Accumulated Context
 
 ### Decisions
 
-- `models/`: `dataset.make_supervised` (multi-horizon, curated ~55-feature allow-list),
-  `baseline_lgbm.LGBMForecaster` (L1 median + P10/P90 quantile boosters, horizon as a
-  feature, persistence blend h≤6, calibrated interval multiplier), `backtest.run`
-  (expanding walk-forward, gap, vs persistence + hour-of-year climatology).
-- CATEGORICAL = station_id/site_type/city/local_hour/local_month/is_weekend/is_stubble_season.
-- Training window in use: **CAMS obs + ERA5 met + FIRMS fires, 2023-10-01 … 2024-01-20**
-  (173k feature rows). CAMS is the model backbone; OpenAQ real data merges where available.
+- Historical CPCB targets: **OpenAQ S3 open-data archive** (keyless, 56/65 stations for winter 2025-26). `ingest.openaq --start … --end …`.
+- Historical met: Open-Meteo ERA5 archive (surface + BLH); pressure-level 925/850 hPa unavailable keyless for old dates → ISI runs 3/4 components, stubble transport uses Ekman-veered 10 m wind. Serving path (GFS) is full fidelity. `era5_arco.py` is a VM upgrade path.
+- API routes consolidated in one `api/routes/endpoints.py` (not 8 files).
+- Dashboard map uses a **self-contained MapLibre style** (no external basemap) — offline-safe; a minimal style must OMIT the `glyphs` key (not set it undefined). `React.StrictMode` removed (double-invoke churns the imperative map).
+- Demo resilience: `demo/snapshot/` committed; API boots from it with no keys/network.
 
-### Pending Todos
+### Pending Todos / stretch
 
-- **Swap in real CPCB targets (OpenAQ S3)** for a recent complete winter, rebuild features,
-  re-backtest. `ingest.openaq --start … --end …` (keyless S3 archive; 60/65 stations mapped).
-  OpenAQ Indian data is location-id-fragmented → coverage partial per year; stitch or accept.
-- LightGBM training is slow on this box (~3 min/fit). Curated feature list already cut it
-  ~3×; consider `HistGradientBoostingRegressor` or fewer boost rounds if iteration hurts.
-- 04-02: TFT + SHAP + registry.
-- OpenRouter key stored, unused (LLM advisories later — billing, ask first).
+- Vite dev-HMR occasionally leaves the map blank after many hot reloads; a fresh dev server / production build is clean. Harden the map lifecycle (recreate on detached container) if it bites.
+- 04-02 stretch: Temporal Fusion Transformer (needs `dl` extra + training time).
+- Quantile calibration is in-sample → coverage 64%; add conformal calibration on a holdout.
+- Severe-event detection weak → class weighting or a dedicated Severe classifier.
+- AQI from PM2.5 only → forecast PM10/NO2/O3 too for a true multi-pollutant AQI.
+- `runpy` warning on `python -m features.build` — cosmetic.
+- OpenRouter key in `.env`, unused (LLM advisories — billing, ask first).
 
 ### Blockers/Concerns
 
-- Historical 925/850 hPa met: documented compromise (ERA5 archive surface + BLH; ISI 3/4
-  components; Ekman-veered 10 m transport wind). Serving path is full fidelity. `era5_arco.py`
-  / `weather.py --past-days` are VM upgrade paths.
+None blocking. External-service friction (Open-Meteo rate limits on bulk pulls, OpenAQ location-id fragmentation, ARCO-ERA5 broken stores) documented in PROJECT.md.
 
 ## Session Continuity
 
 Last session: 2026-08-29
-Stopped at: backtest re-running with L1 median + blend + calibration. Next: read results, commit 04-01, then OpenAQ real-target swap.
+Stopped at: All phases complete; repo pushed to github.com/umangjzx/wcfs.
 Resume file: None

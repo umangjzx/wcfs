@@ -1,0 +1,35 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      # keys are optional — without them the API serves the bundled snapshot
+      DATA_GOV_IN_API_KEY: ${DATA_GOV_IN_API_KEY:-}
+      FIRMS_MAP_KEY: ${FIRMS_MAP_KEY:-}
+      OPENAQ_API_KEY: ${OPENAQ_API_KEY:-}
+      VAYUCAST_BOOT_INGEST: ${VAYUCAST_BOOT_INGEST:-1}
+      VAYUCAST_REFRESH_MIN: "60"
+    volumes:
+      - vayucast-data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  vayucast-data:
