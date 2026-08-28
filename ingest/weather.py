@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import time
 
 import numpy as np
 import pandas as pd
@@ -31,6 +32,7 @@ from ingest.common import (
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+_CHUNK_PAUSE_S = 1.5  # be gentle on the Open-Meteo free tier
 
 # canonical column -> Open-Meteo hourly variable
 _FIELD_MAP = {
@@ -109,6 +111,8 @@ def _request(url: str, stations: list[Station], extra: dict, *, chunk: int = 20)
         for st, blk in zip(grp, group_blocks, strict=False):
             blk["_station_id"] = st.id
             blocks.append(blk)
+        if i + chunk < len(stations):
+            time.sleep(_CHUNK_PAUSE_S)
     return blocks
 
 

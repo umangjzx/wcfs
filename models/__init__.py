@@ -7,5 +7,10 @@
 
 from models.baseline_lgbm import LGBMForecaster, train
 from models.dataset import DEFAULT_HORIZONS, make_supervised
+from models.drivers import explain, explain_station_forecast
+from models.serving import forecast, peak_alerts
 
-__all__ = ["LGBMForecaster", "train", "make_supervised", "DEFAULT_HORIZONS"]
+__all__ = [
+    "LGBMForecaster", "train", "make_supervised", "DEFAULT_HORIZONS",
+    "explain", "explain_station_forecast", "forecast", "peak_alerts",
+]

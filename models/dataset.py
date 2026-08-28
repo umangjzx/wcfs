@@ -71,16 +71,20 @@ def make_supervised(
     *,
     target: str = "pm25",
     base_stride_h: int = 3,
+    require_target: bool = True,
 ) -> tuple[pd.DataFrame, list[str]]:
+    """Build the (station, t0, horizon) table. ``require_target=False`` for serving, where
+    the t0+h rows have no observed target yet."""
     horizons = horizons or DEFAULT_HORIZONS
     feat = feat.sort_values(["station_id", "ts"]).reset_index(drop=True)
     feat["ts"] = pd.to_datetime(feat["ts"], utc=True)
 
-    x_cols = [c for c in feature_columns(feat) if c != target or True]  # keep t0 target (persistence)
+    x_cols = list(feature_columns(feat))  # includes the t0 target column (persistence signal)
     fut_cols = [c for c in FUTURE_COLS if c in feat.columns]
 
     base = feat[feat["ts"].dt.hour % base_stride_h == 0].copy()
-    base = base.dropna(subset=[target] + [c for c in ("blh", "t2m") if c in base])
+    if require_target:
+        base = base.dropna(subset=[target] + [c for c in ("blh", "t2m") if c in base])
 
     fut_base = feat[["station_id", "ts", target, *fut_cols]].copy()
     parts = []
@@ -94,9 +98,9 @@ def make_supervised(
         parts.append(m)
 
     sup = pd.concat(parts, ignore_index=True)
-    sup = sup.dropna(subset=["target"])
-    model_cols = [*x_cols, *[f"f_{c}" for c in fut_cols], "horizon"]
-    model_cols = list(dict.fromkeys(model_cols))
+    if require_target:
+        sup = sup.dropna(subset=["target"])
+    model_cols = list(dict.fromkeys([*x_cols, *[f"f_{c}" for c in fut_cols], "horizon"]))
     return sup, model_cols
 
 
