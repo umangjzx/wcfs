@@ -84,3 +84,43 @@ def test_walk_forward_folds_respects_gap():
     for f in folds:
         assert f.train_end < f.test_start
         assert (f.test_start - f.train_end).days >= 2
+
+
+def test_serving_forecast_and_alerts_and_drivers():
+    from models.drivers import explain_station_forecast
+    from models.serving import forecast, peak_alerts
+
+    feat = _synthetic_features(n_stations=2, hours=24 * 40)
+    fc = train(feat, horizons=[1, 6, 12, 24], num_boost=40, base_stride_h=6)
+
+    # serving frame: recent obs rows + 24 future rows (no pm25) carrying f_* covariates
+    serv = feat.groupby("station_id").tail(24 * 4).copy()
+    fut = serv.groupby("station_id").tail(1).copy()
+    future_rows = []
+    for _, row in fut.iterrows():
+        for h in range(1, 25):
+            r = row.copy()
+            r["ts"] = row["ts"] + pd.Timedelta(hours=h)
+            r["pm25"] = np.nan
+            future_rows.append(r)
+    serv = pd.concat([serv, pd.DataFrame(future_rows)], ignore_index=True)
+
+    fdf = forecast(fc, serv, horizon_h=24)
+    assert not fdf.empty
+    assert set(fdf["station_id"].unique()) == {"S0", "S1"}
+    assert (fdf.groupby("station_id")["horizon"].max() == 24).all()
+    assert {"pm25_p10", "pm25_p50", "pm25_p90", "aqi", "category", "advisory"} <= set(fdf.columns)
+    assert (fdf["pm25_p10"] <= fdf["pm25_p90"] + 1e-6).all()
+
+    alerts = peak_alerts(fdf)
+    assert isinstance(alerts, list)
+
+    from models.dataset import make_supervised
+
+    sup, _ = make_supervised(feat.iloc[:15000], horizons=[6, 24], base_stride_h=6)
+    d = explain_station_forecast(fc, fdf, sup, "S0")
+    assert d["station_id"] == "S0"
+    assert set(d["groups"]) & {
+        "inversion_trapping", "stubble_transport", "local_emissions_persistence",
+        "wind_ventilation", "other_meteorology", "time_season",
+    }
