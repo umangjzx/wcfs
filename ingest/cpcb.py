@@ -356,14 +356,24 @@ def _cmd_once() -> None:
         print(f"obs.parquet now {len(merged)} rows / {merged['station_id'].nunique()} stations")
 
 
-def _cmd_history(start: str, end: str) -> None:
+def _cmd_history(start: str, end: str, source: str, append: bool) -> None:
     SETTINGS.ensure_dirs()
     s = dt.date.fromisoformat(start)
     e = dt.date.fromisoformat(end)
-    df, res = fetch_history(start=s, end=e)
+    if source == "cams":
+        df, res = fetch_history_openmeteo(load_stations(), s, e)
+    elif source == "openaq":
+        from ingest.openaq import fetch_history_s3
+
+        df, res = fetch_history_s3(load_stations(), s, e)
+    else:  # auto
+        df, res = fetch_history(start=s, end=e)
     print(res.as_dict())
     if not df.empty:
-        write_table(df, SETTINGS.processed_dir / "obs_history.parquet")
+        out = SETTINGS.processed_dir / "obs_history.parquet"
+        if append and out.exists():
+            df = merge_observations(pd.read_parquet(out), df)
+        write_table(df, out)
         save_snapshot("cpcb_history", df)
 
 
@@ -392,6 +402,9 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ingest.cpcb", description=__doc__)
     ap.add_argument("--once", action="store_true", help="fetch current real-time snapshot")
     ap.add_argument("--history", action="store_true", help="fetch historical series")
+    ap.add_argument("--source", choices=["auto", "openaq", "cams"], default="auto",
+                    help="auto = OpenAQ S3 ground truth, else CAMS model fallback")
+    ap.add_argument("--append", action="store_true", help="merge into obs_history.parquet")
     ap.add_argument("--start", default="2021-10-01")
     ap.add_argument("--end", default=dt.date.today().isoformat())
     ap.add_argument("--sync-stations", action="store_true", help="compare registry vs feed coords")
@@ -400,7 +413,7 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     if args.history:
-        _cmd_history(args.start, args.end)
+        _cmd_history(args.start, args.end, args.source, args.append)
     elif args.sync_stations:
         _cmd_sync_stations(args.write)
     elif args.stats:

@@ -46,6 +46,7 @@ _MAP_PATH = SETTINGS.raw_dir / "openaq_map.json"
 _MIN_INTERVAL_S = 1.05  # stay under the 60 req/min free-tier limit
 
 _last_call = [0.0]
+_VERBOSE = [True]
 
 
 def _throttle() -> None:
@@ -274,15 +275,17 @@ def fetch_history_s3(
     start = start or (dt.date.today() - dt.timedelta(days=180))
     end = end or dt.date.today()
     smap = load_station_map()
+    verbose = _VERBOSE[0]
 
     frames: list[pd.DataFrame] = []
     n_files = 0
-    for st in stations:
-        lid = (smap.get(st.id) or {}).get("location_id")
-        if not lid:
-            continue
+    mapped = [s for s in stations if (smap.get(s.id) or {}).get("location_id")]
+    for i, st in enumerate(mapped, 1):
+        lid = smap[st.id]["location_id"]
         day_keys = _s3_day_keys(lid, start, end)
         n_files += len(day_keys)
+        if verbose:
+            print(f"  [{i:2d}/{len(mapped)}] {st.id:28s} loc={lid} files={len(day_keys)}", flush=True)
         if not day_keys:
             continue
         with ThreadPoolExecutor(max_workers=workers) as ex:
