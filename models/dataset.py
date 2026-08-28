@@ -21,35 +21,46 @@ CATEGORICAL = ["station_id", "site_type", "city",
 
 # Curated model inputs (a subset of the ~160 columns in the feature matrix). Keeps
 # LightGBM fast and interpretable; the full matrix stays available for analysis.
+TARGETS = ["pm25", "pm10", "no2"]  # forecast each -> real multi-pollutant AQI
+
 _MODEL_ALLOW_T0 = [
     # recent pollutant state / persistence
-    "pm25", "pm10", "no2", "aqi", "aqi_inst",
-    "pm25_lag1", "pm25_lag3", "pm25_lag6", "pm25_lag12", "pm25_lag24",
-    "pm25_roll6", "pm25_roll24", "pm25_tend_6h", "pm25_tend_24h",
-    "pm10_lag6", "no2_lag6", "aqi_lag24",
+    "pm25", "pm10", "no2", "o3", "so2", "co", "aqi", "aqi_inst",
+    "pm25_lag1", "pm25_lag2", "pm25_lag3", "pm25_lag4", "pm25_lag6", "pm25_lag8",
+    "pm25_lag12", "pm25_lag24", "pm25_lag36", "pm25_lag48",
+    "pm25_roll6", "pm25_roll24", "pm25_rollstd24", "pm25_rollmax24",
+    "pm25_tend_6h", "pm25_tend_24h", "pm25_anom", "pm25_over_pm10",
+    "pm10_lag6", "pm10_lag24", "pm10_roll24", "no2_lag6", "no2_lag24", "no2_rollmax24",
+    "o3_lag6", "so2_lag6", "co_lag6", "aqi_lag24",
     # coupled features (the point of the project)
-    "isi", "isi_pbl", "isi_stagnation", "isi_theta", "self_trapping",
-    "ventilation_index", "pbl_height", "dtheta_surface",
-    "incoming_stubble_load", "stubble_index", "plume_from_bearing_deg",
-    "fire_frp_active", "nearest_fire_km",
+    "isi", "isi_pbl", "isi_stagnation", "isi_theta", "isi_radiative",
+    "self_trapping", "self_trapping_lag24", "isi_x_pm25", "stubble_x_isi",
+    "ventilation_index", "ventilation_index_lag24", "ventilation_index_roll24",
+    "pbl_height", "dtheta_surface", "blh_tend_6h", "vent_tend_6h",
+    "incoming_stubble_load", "incoming_stubble_load_lag24", "incoming_stubble_load_roll24",
+    "stubble_index", "stubble_index_lag24", "plume_from_bearing_deg",
+    "fire_frp_active", "fire_frp_active_lag24", "nearest_fire_km",
     "aod_proxy", "aod_proxy_lag24", "radiative_dimming", "pbl_suppression",
-    "pm25_x_blh_lag24",
+    "pm25_x_blh_lag24", "wind_steadiness_6h", "hours_since_rain",
     # meteorology now
-    "t2m", "d2m", "rh2m", "blh", "wind_speed10", "wind_u10", "wind_v10",
+    "t2m", "d2m", "rh2m", "blh", "wind_speed10", "wind_dir10", "wind_u10", "wind_v10",
     "wind_u850", "wind_v850", "surface_pressure", "precip", "solar", "cloud",
-    "blh_lag24", "wind_speed10_lag24", "t2m_lag24", "isi_lag24",
-    # calendar / static
-    "local_hour", "local_month", "is_weekend", "is_stubble_season",
-    "hour_sin", "hour_cos", "doy_sin", "doy_cos",
+    "blh_lag24", "wind_speed10_lag24", "wind_speed10_roll24", "t2m_lag24", "solar_lag6",
+    "cloud_lag6", "isi_lag24",
+    # calendar / static / regime
+    "local_hour", "local_dow", "local_month", "is_weekend", "is_stubble_season",
+    "is_morning_rush", "is_evening_peak",
+    "hour_sin", "hour_cos", "doy_sin", "doy_cos", "month_sin", "month_cos",
     "days_into_stubble_season", "diwali_proximity",
     "station_id", "site_type", "city", "lat", "lon",
 ]
 _MODEL_ALLOW_FUTURE = [
-    "blh", "t2m", "rh2m", "wind_speed10", "wind_u10", "wind_v10",
-    "wind_u850", "wind_v850", "precip", "solar", "cloud",
-    "isi", "isi_pbl", "isi_stagnation", "ventilation_index",
-    "incoming_stubble_load", "stubble_index",
+    "blh", "t2m", "rh2m", "wind_speed10", "wind_dir10", "wind_u10", "wind_v10",
+    "wind_u850", "wind_v850", "precip", "solar", "cloud", "surface_pressure",
+    "isi", "isi_pbl", "isi_stagnation", "isi_radiative", "ventilation_index",
+    "incoming_stubble_load", "stubble_index", "hours_since_rain",
     "hour_sin", "hour_cos", "doy_sin", "doy_cos", "is_weekend",
+    "is_morning_rush", "is_evening_peak",
     "diwali_proximity", "is_stubble_season", "days_into_stubble_season",
 ]
 

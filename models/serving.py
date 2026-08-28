@@ -11,7 +11,7 @@ import pandas as pd
 
 from aqi.cpcb_aqi import aqi_category, health_advisory
 from config.settings import FORECAST_HORIZON_HOURS
-from models.baseline_lgbm import LGBMForecaster
+from models.baseline_lgbm import MultiForecaster
 from models.dataset import make_supervised
 
 
@@ -22,7 +22,7 @@ def _latest_base_rows(feat: pd.DataFrame) -> pd.DataFrame:
 
 
 def forecast(
-    fc: LGBMForecaster,
+    fc: MultiForecaster,
     feat_serving: pd.DataFrame,
     *,
     horizon_h: int = FORECAST_HORIZON_HOURS,
@@ -40,16 +40,17 @@ def forecast(
     if sup.empty:
         return pd.DataFrame()
 
-    pred = fc.predict(sup)
-    pred = pred.rename(columns={"ts0": "issued_ts"})
-    pred["aqi"] = pred["aqi_p50"].round().astype("Int64")
+    pred = fc.predict(sup).rename(columns={"ts0": "issued_ts"})
+    pred["aqi"] = pd.to_numeric(pred["aqi"], errors="coerce").round().astype("Int64")
     pred["category"] = pred["aqi"].map(lambda a: aqi_category(a) if pd.notna(a) else "Unknown")
     pred["advisory"] = pred["category"].map(health_advisory)
-    pred["dominant_pollutant"] = "PM2.5"
-    cols = ["station_id", "issued_ts", "valid_ts", "horizon",
+    keep = ["station_id", "issued_ts", "valid_ts", "horizon",
             "pm25_p10", "pm25_p50", "pm25_p90", "aqi", "category", "advisory",
             "dominant_pollutant"]
-    return pred[cols].sort_values(["station_id", "horizon"]).reset_index(drop=True)
+    for extra in ("pm10_p50", "no2_p50"):
+        if extra in pred:
+            keep.append(extra)
+    return pred[keep].sort_values(["station_id", "horizon"]).reset_index(drop=True)
 
 
 _DELHI_WINTER_DIURNAL = np.array([  # relative PM2.5 by local hour (peak pre-dawn / evening)

@@ -1,30 +1,29 @@
-"""LightGBM multi-horizon quantile baseline for the 72 h PM2.5 forecast.
+"""LightGBM multi-horizon quantile forecaster(s).
 
-Three boosters (P10 / P50 / P90), each with ``horizon`` as an input feature so one model
-covers the whole 1..72 h range. Fast to train, honest baseline for the TFT to beat.
+Per pollutant target (PM2.5, PM10, NO2): an L1-regression median + P10/P90 quantile
+boosters, ``horizon`` as an input feature so one model spans 1..72 h. Rare high-pollution
+rows are up-weighted; the P10-P90 interval is calibrated by split-conformal (CQR) on a
+held-out slice. ``MultiForecaster`` runs all three and derives the real CPCB AQI.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from config.settings import QUANTILES, SETTINGS
-from models.dataset import (
-    DEFAULT_HORIZONS,
-    add_predicted_aqi,
-    encode_categoricals,
-    make_supervised,
-)
+from aqi.cpcb_aqi import aqi_category, sub_index_series
+from config.settings import SETTINGS
+from models.conformal import apply_margins, coverage_report, cqr_margins
+from models.dataset import DEFAULT_HORIZONS, TARGETS, encode_categoricals, make_supervised
 
 REGISTRY = Path(__file__).resolve().parent / "registry"
 
 _LGB_PARAMS = dict(
-    n_estimators=350,
+    n_estimators=320,
     learning_rate=0.06,
     num_leaves=31,
     max_bin=127,
@@ -37,98 +36,11 @@ _LGB_PARAMS = dict(
     n_jobs=-1,
     verbosity=-1,
 )
-
-
-@dataclass
-class LGBMForecaster:
-    models: dict[float, object]
-    feature_cols: list[str]
-    categorical: list[str]
-    target: str
-    horizons: list[int]
-
-    # -- persistence -----------------------------------------------------
-    def save(self, path: Path | str = REGISTRY) -> None:
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
-        keymap = {"median": "median", 0.1: "q10", 0.9: "q90"}
-        for k, m in self.models.items():
-            m.booster_.save_model(str(path / f"lgbm_pm25_{keymap[k]}.txt"))
-        (path / "lgbm_meta.json").write_text(json.dumps({
-            "feature_cols": self.feature_cols,
-            "categorical": self.categorical,
-            "target": self.target,
-            "horizons": self.horizons,
-            "interval_k": self.interval_k,
-        }, indent=2), encoding="utf-8")
-
-    @classmethod
-    def load(cls, path: Path | str = REGISTRY) -> LGBMForecaster:
-        import lightgbm as lgb
-
-        path = Path(path)
-        meta = json.loads((path / "lgbm_meta.json").read_text(encoding="utf-8"))
-        models = {
-            "median": _BoosterWrap(lgb.Booster(model_file=str(path / "lgbm_pm25_median.txt"))),
-            0.1: _BoosterWrap(lgb.Booster(model_file=str(path / "lgbm_pm25_q10.txt"))),
-            0.9: _BoosterWrap(lgb.Booster(model_file=str(path / "lgbm_pm25_q90.txt"))),
-        }
-        fc = cls(models, meta["feature_cols"], meta["categorical"],
-                 meta["target"], meta["horizons"])
-        fc.interval_k = meta.get("interval_k", 1.0)
-        return fc
-
-    # spread multiplier so P10-P90 covers ~80% (set by calibrate(); 1.0 until then)
-    interval_k: float = 1.0
-    # horizons at/below which the P50 is blended toward persistence
-    _persist_blend_h: int = 6
-
-    # -- inference -----------------------------------------------------
-    def predict(self, sup: pd.DataFrame) -> pd.DataFrame:
-        """``sup`` = rows from make_supervised (or the serving equivalent). Returns
-        station_id, ts0, horizon, valid_ts, pm25_p10/p50/p90, aqi_p50."""
-        X, _ = encode_categoricals(sup[self.feature_cols], self.categorical)
-        out = sup[["station_id"]].copy()
-        out["ts0"] = sup["ts"] if "ts" in sup else sup.get("ts0")
-        out["horizon"] = sup["horizon"].to_numpy()
-        out["valid_ts"] = out["ts0"] + pd.to_timedelta(out["horizon"], unit="h")
-
-        p50 = np.clip(self.models["median"].predict(X), 0, None)
-        p10 = np.clip(self.models[0.1].predict(X), 0, None)
-        p90 = np.clip(self.models[0.9].predict(X), 0, None)
-
-        # blend toward persistence for the first few hours (current value is hard to beat)
-        if "pm25" in sup.columns:
-            h = out["horizon"].to_numpy()
-            w = np.clip(h / self._persist_blend_h, 0, 1)
-            p50 = w * p50 + (1 - w) * sup["pm25"].to_numpy()
-
-        # widen the predictive interval by the calibrated factor, keep it centred on p50
-        p10 = p50 - self.interval_k * np.maximum(p50 - p10, 0)
-        p90 = p50 + self.interval_k * np.maximum(p90 - p50, 0)
-
-        out["pm25_p10"] = np.clip(p10, 0, None)
-        out["pm25_p50"] = p50
-        out["pm25_p90"] = p90
-        out["aqi_p50"] = add_predicted_aqi(p50)
-        out[["pm25_p10", "pm25_p50", "pm25_p90"]] = np.sort(
-            out[["pm25_p10", "pm25_p50", "pm25_p90"]].to_numpy(), axis=1)
-        return out
-
-    def calibrate(self, sup_cal: pd.DataFrame) -> LGBMForecaster:
-        """Set ``interval_k`` so P10-P90 empirically covers ~80% on a calibration slice."""
-        self.interval_k = 1.0
-        pred = self.predict(sup_cal)
-        y = sup_cal["target"].to_numpy()
-        half = np.maximum(pred["pm25_p90"].to_numpy() - pred["pm25_p50"].to_numpy(), 1e-6)
-        resid = np.abs(y - pred["pm25_p50"].to_numpy())
-        self.interval_k = float(np.clip(np.quantile(resid / half, 0.8), 0.5, 6.0))
-        return self
+_PERSIST_BLEND_H = 6
+_CAL_FRACTION = 0.15  # tail of the training window held out for conformal calibration
 
 
 class _BoosterWrap:
-    """Give a loaded Booster the same .predict signature as the sklearn estimator."""
-
     def __init__(self, booster):
         self.booster_ = booster
 
@@ -136,41 +48,182 @@ class _BoosterWrap:
         return self.booster_.predict(X)
 
 
-def train(
-    feat: pd.DataFrame,
-    *,
-    horizons: list[int] | None = None,
-    quantiles=QUANTILES,
-    target: str = "pm25",
-    base_stride_h: int = 2,
-    num_boost: int | None = None,
+@dataclass
+class LGBMForecaster:
+    models: dict
+    feature_cols: list[str]
+    categorical: list[str]
+    target: str
+    horizons: list[int]
+    conformal: dict[str, float] = field(default_factory=lambda: {"_global": 0.0})
+
+    def _cols(self) -> tuple[str, str, str]:
+        t = self.target
+        return f"{t}_p10", f"{t}_p50", f"{t}_p90"
+
+    def predict(self, sup: pd.DataFrame) -> pd.DataFrame:
+        X, _ = encode_categoricals(sup[self.feature_cols], self.categorical)
+        hz = sup["horizon"].to_numpy()
+        out = pd.DataFrame({"station_id": sup["station_id"].to_numpy(), "horizon": hz})
+        out["ts0"] = (sup["ts"] if "ts" in sup else sup["ts0"]).to_numpy()
+        out["valid_ts"] = pd.to_datetime(out["ts0"], utc=True) + pd.to_timedelta(hz, unit="h")
+
+        p50 = np.clip(self.models["median"].predict(X), 0, None)
+        p10 = np.clip(self.models[0.1].predict(X), 0, None)
+        p90 = np.clip(self.models[0.9].predict(X), 0, None)
+
+        if self.target in sup.columns:
+            w = np.clip(hz / _PERSIST_BLEND_H, 0, 1)
+            p50 = w * p50 + (1 - w) * sup[self.target].to_numpy()
+            p10 = np.minimum(p10, p50)
+            p90 = np.maximum(p90, p50)
+
+        p10, p90 = apply_margins(p10, p90, hz, self.conformal)
+        c10, c50, c90 = self._cols()
+        stk = np.sort(np.vstack([p10, p50, p90]).T, axis=1)
+        out[c10], out[c50], out[c90] = stk[:, 0], stk[:, 1], stk[:, 2]
+        return out
+
+    def calibrate(self, sup_cal: pd.DataFrame) -> LGBMForecaster:
+        Xc = encode_categoricals(sup_cal[self.feature_cols], self.categorical)[0]
+        raw10 = self.models[0.1].predict(Xc)
+        raw90 = self.models[0.9].predict(Xc)
+        self.conformal = cqr_margins(
+            sup_cal["target"].to_numpy(), np.clip(raw10, 0, None), np.clip(raw90, 0, None),
+            sup_cal["horizon"].to_numpy(),
+        )
+        return self
+
+    # -- persistence ---------------------------------------------------
+    def save(self, path: Path | str = REGISTRY) -> None:
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        km = {"median": "median", 0.1: "q10", 0.9: "q90"}
+        for k, m in self.models.items():
+            m.booster_.save_model(str(path / f"lgbm_{self.target}_{km[k]}.txt"))
+        (path / f"lgbm_{self.target}_meta.json").write_text(json.dumps({
+            "feature_cols": self.feature_cols, "categorical": self.categorical,
+            "target": self.target, "horizons": self.horizons, "conformal": self.conformal,
+        }, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, target: str = "pm25", path: Path | str = REGISTRY) -> LGBMForecaster:
+        import lightgbm as lgb
+
+        path = Path(path)
+        meta = json.loads((path / f"lgbm_{target}_meta.json").read_text(encoding="utf-8"))
+        models = {
+            "median": _BoosterWrap(lgb.Booster(model_file=str(path / f"lgbm_{target}_median.txt"))),
+            0.1: _BoosterWrap(lgb.Booster(model_file=str(path / f"lgbm_{target}_q10.txt"))),
+            0.9: _BoosterWrap(lgb.Booster(model_file=str(path / f"lgbm_{target}_q90.txt"))),
+        }
+        return cls(models, meta["feature_cols"], meta["categorical"], meta["target"],
+                   meta["horizons"], meta.get("conformal", {"_global": 0.0}))
+
+
+def _sample_weight(y: np.ndarray) -> np.ndarray:
+    """Up-weight high-pollution rows so Very Poor / Severe episodes aren't averaged away."""
+    return np.clip(1.0 + (np.clip(y, 0, None) / 120.0) ** 1.6, 1.0, 8.0)
+
+
+def train_target(
+    feat: pd.DataFrame, target: str, *, horizons: list[int] | None = None,
+    base_stride_h: int = 3, num_boost: int | None = None,
 ) -> LGBMForecaster:
     import lightgbm as lgb
 
     horizons = horizons or DEFAULT_HORIZONS
     sup, cols = make_supervised(feat, horizons, target=target, base_stride_h=base_stride_h)
     sup, cat = encode_categoricals(sup, cols)
-    X = sup[cols]
-    y = sup["target"].to_numpy("float64")
+
+    # time-ordered split: tail slice held out for conformal calibration
+    cut = sup["ts"].quantile(1 - _CAL_FRACTION)
+    fit = sup[sup["ts"] <= cut]
+    cal = sup[sup["ts"] > cut]
+    Xf, yf = fit[cols], fit["target"].to_numpy("float64")
+    w = _sample_weight(yf)
 
     params = dict(_LGB_PARAMS)
     if num_boost:
         params["n_estimators"] = num_boost
 
     models: dict = {}
-    # median: L1 regression (unbiased-ish, better MAE than pinball@0.5)
     m = lgb.LGBMRegressor(objective="regression_l1", **params)
-    m.fit(X, y, categorical_feature=cat)
+    m.fit(Xf, yf, sample_weight=w, categorical_feature=cat)
     models["median"] = m
-    # lower / upper quantiles for the predictive interval
     for q in (0.1, 0.9):
         est = lgb.LGBMRegressor(objective="quantile", alpha=q, **params)
-        est.fit(X, y, categorical_feature=cat)
+        est.fit(Xf, yf, sample_weight=w, categorical_feature=cat)
         models[float(q)] = est
 
     fc = LGBMForecaster(models, cols, cat, target, horizons)
-    fc.calibrate(sup)
+    fc.calibrate(cal if len(cal) > 500 else sup)
     return fc
+
+
+@dataclass
+class MultiForecaster:
+    by_target: dict[str, LGBMForecaster]
+
+    @property
+    def horizons(self) -> list[int]:
+        return next(iter(self.by_target.values())).horizons
+
+    @property
+    def feature_cols(self) -> list[str]:
+        return next(iter(self.by_target.values())).feature_cols
+
+    @property
+    def categorical(self) -> list[str]:
+        return next(iter(self.by_target.values())).categorical
+
+    def predict(self, sup: pd.DataFrame) -> pd.DataFrame:
+        # each fc.predict returns rows in sup order -> combine columns positionally
+        base = None
+        for t, fc in self.by_target.items():
+            p = fc.predict(sup).reset_index(drop=True)
+            if base is None:
+                base = p
+            else:
+                for c in (f"{t}_p10", f"{t}_p50", f"{t}_p90"):
+                    base[c] = p[c].to_numpy()
+        # real CPCB AQI from the P50 of each pollutant
+        canon = {"pm25": "PM2.5", "pm10": "PM10", "no2": "NO2"}
+        sub = np.vstack([
+            sub_index_series(canon[t], base[f"{t}_p50"].to_numpy())
+            for t in self.by_target if f"{t}_p50" in base
+        ])
+        with np.errstate(invalid="ignore"):
+            aqi = np.nanmax(np.where(np.isnan(sub), -np.inf, sub), axis=0)
+        base["aqi"] = np.where(np.isfinite(aqi), np.round(aqi), np.nan)
+        base["aqi_p50"] = base["aqi"]
+        names = np.array([canon[t] for t in self.by_target if f"{t}_p50" in base])
+        dom = names[np.argmax(np.where(np.isnan(sub), -np.inf, sub), axis=0)]
+        base["dominant_pollutant"] = np.where(np.isfinite(aqi), dom, "PM2.5")
+        base["category"] = [aqi_category(a) if np.isfinite(a) else "Unknown" for a in base["aqi"]]
+        return base
+
+    def save(self, path: Path | str = REGISTRY) -> None:
+        for fc in self.by_target.values():
+            fc.save(path)
+        Path(path).joinpath("registry_index.json").write_text(
+            json.dumps({"targets": list(self.by_target)}, indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path | str = REGISTRY) -> MultiForecaster:
+        idx = Path(path) / "registry_index.json"
+        targets = json.loads(idx.read_text(encoding="utf-8"))["targets"] if idx.exists() else ["pm25"]
+        return cls({t: LGBMForecaster.load(t, path) for t in targets})
+
+
+def train(feat: pd.DataFrame, *, targets: list[str] | None = None,
+          base_stride_h: int = 3, num_boost: int | None = None,
+          horizons: list[int] | None = None) -> MultiForecaster:
+    targets = targets or TARGETS
+    return MultiForecaster({
+        t: train_target(feat, t, horizons=horizons, base_stride_h=base_stride_h, num_boost=num_boost)
+        for t in targets
+    })
 
 
 def _cmd(argv=None) -> None:
@@ -178,12 +231,14 @@ def _cmd(argv=None) -> None:
 
     ap = argparse.ArgumentParser(prog="models.baseline_lgbm")
     ap.add_argument("--features", default=str(SETTINGS.processed_dir / "features.parquet"))
-    ap.add_argument("--stride", type=int, default=2)
+    ap.add_argument("--stride", type=int, default=3)
     args = ap.parse_args(argv)
     feat = pd.read_parquet(args.features)
-    fc = train(feat, base_stride_h=args.stride)
-    fc.save()
-    print(f"trained LGBM P10/P50/P90 on {len(feat)} feature rows; saved to {REGISTRY}")
+    mf = train(feat, base_stride_h=args.stride)
+    mf.save()
+    sup, _ = make_supervised(feat, mf.horizons, target="pm25", base_stride_h=6)
+    cov = coverage_report(mf.by_target["pm25"].predict(sup), sup["target"].to_numpy())
+    print(f"trained {list(mf.by_target)} -> {REGISTRY}; pm25 P10-P90 coverage {cov['overall']:.0%}")
 
 
 if __name__ == "__main__":

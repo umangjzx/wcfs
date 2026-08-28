@@ -86,7 +86,21 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
   }
 
   useEffect(() => {
-    if (!box.current || map.current) return;
+    if (!box.current) return;
+    // HMR / re-mount: drop a map whose container is no longer the live div
+    if (map.current) {
+      const c = map.current.getContainer?.();
+      if (c === box.current && !("_removed" in map.current && (map.current as { _removed?: boolean })._removed)) {
+        return;
+      }
+      try {
+        map.current.remove();
+      } catch {
+        /* already gone */
+      }
+      map.current = null;
+      ready.current = false;
+    }
     const m = new maplibregl.Map({
       container: box.current,
       style: BLANK_DARK_STYLE as maplibregl.StyleSpecification,

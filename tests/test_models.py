@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from models.baseline_lgbm import LGBMForecaster, train
+from models.baseline_lgbm import MultiForecaster, train, train_target
 from models.dataset import make_supervised
 
 
@@ -55,24 +55,34 @@ def test_make_supervised_shapes_and_target_alignment():
     assert "f_blh" in cols and "horizon" in cols
 
 
-def test_lgbm_forecaster_trains_predicts_and_roundtrips(tmp_path):
+def test_multiforecaster_trains_predicts_and_roundtrips(tmp_path):
     feat = _synthetic_features(hours=24 * 40)
-    fc = train(feat, horizons=[1, 6, 12, 24], target="pm25", base_stride_h=3, num_boost=60)
+    mf = train(feat, targets=["pm25", "no2"], horizons=[1, 6, 12, 24], base_stride_h=3, num_boost=60)
     sup, _ = make_supervised(feat, [1, 6, 12, 24], target="pm25", base_stride_h=6)
-    pred = fc.predict(sup)
+    pred = mf.predict(sup)
 
-    assert {"pm25_p10", "pm25_p50", "pm25_p90", "aqi_p50", "valid_ts"} <= set(pred.columns)
-    # quantiles ordered
+    assert {"pm25_p10", "pm25_p50", "pm25_p90", "no2_p50", "aqi", "category", "valid_ts"} <= set(pred.columns)
     assert (pred["pm25_p10"] <= pred["pm25_p50"] + 1e-6).all()
     assert (pred["pm25_p50"] <= pred["pm25_p90"] + 1e-6).all()
-    # beats a naive "predict the global mean" on MAE
-    mae = (pred["pm25_p50"].to_numpy() - sup["target"].to_numpy())
+    mae = pred["pm25_p50"].to_numpy() - sup["target"].to_numpy()
     assert np.mean(np.abs(mae)) < sup["target"].std()
 
-    fc.save(tmp_path)
-    fc2 = LGBMForecaster.load(tmp_path)
-    pred2 = fc2.predict(sup)
+    mf.save(tmp_path)
+    mf2 = MultiForecaster.load(tmp_path)
+    assert set(mf2.by_target) == {"pm25", "no2"}
+    pred2 = mf2.predict(sup)
     np.testing.assert_allclose(pred["pm25_p50"].to_numpy(), pred2["pm25_p50"].to_numpy(), rtol=1e-5)
+
+
+def test_conformal_calibration_widens_toward_target_coverage():
+    from models.conformal import coverage_report
+
+    feat = _synthetic_features(hours=24 * 45)
+    fc = train_target(feat, "pm25", horizons=[1, 12, 24], base_stride_h=4, num_boost=60)
+    assert fc.conformal.get("_global", 0.0) >= 0.0
+    sup, _ = make_supervised(feat, [1, 12, 24], target="pm25", base_stride_h=6)
+    cov = coverage_report(fc.predict(sup), sup["target"].to_numpy())
+    assert 0.5 <= cov["overall"] <= 0.99   # in a sane band (in-sample so may exceed 0.8)
 
 
 def test_walk_forward_folds_respects_gap():

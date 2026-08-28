@@ -70,11 +70,11 @@ STATE = PipelineState()
 
 # ---------------------------------------------------------------------------
 def _load_model():
-    from models.baseline_lgbm import REGISTRY, LGBMForecaster
+    from models.baseline_lgbm import REGISTRY, MultiForecaster
 
-    if (REGISTRY / "lgbm_meta.json").exists():
+    if (REGISTRY / "lgbm_pm25_meta.json").exists():
         try:
-            return LGBMForecaster.load(), "lgbm"
+            return MultiForecaster.load(), "lgbm"
         except Exception:  # noqa: BLE001
             pass
     return None, "naive"

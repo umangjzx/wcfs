@@ -7,6 +7,8 @@ const GROUP_LABEL: Record<string, string> = {
   wind_ventilation: "Wind ventilation",
   other_meteorology: "Other meteorology",
   time_season: "Time & season",
+  station_context: "Site character",
+  unclassified: "Other",
 };
 const GROUP_COLOR: Record<string, string> = {
   inversion_trapping: "#a855f7",
@@ -15,6 +17,8 @@ const GROUP_COLOR: Record<string, string> = {
   wind_ventilation: "#22c55e",
   other_meteorology: "#64748b",
   time_season: "#eab308",
+  station_context: "#94a3b8",
+  unclassified: "#475569",
 };
 
 interface Props {

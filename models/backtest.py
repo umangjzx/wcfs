@@ -72,7 +72,7 @@ def _climatology(train_feat: pd.DataFrame, target: str) -> pd.Series:
 
 
 def evaluate_fold(feat: pd.DataFrame, fold: Fold, horizons: list[int], target: str,
-                  stride: int) -> pd.DataFrame:
+                  stride: int, targets: list[str] | None = None) -> pd.DataFrame:
     ts = pd.to_datetime(feat["ts"], utc=True)
     tr = feat[ts <= fold.train_end]
     te = feat[(ts > fold.test_start) & (ts <= fold.test_end)]
@@ -81,7 +81,7 @@ def evaluate_fold(feat: pd.DataFrame, fold: Fold, horizons: list[int], target: s
 
     print(f"  fold train<= {fold.train_end.date()} ({len(tr)} feat rows) "
           f"test {fold.test_start.date()}..{fold.test_end.date()}", flush=True)
-    fc = train(tr, horizons=horizons, target=target, base_stride_h=stride, num_boost=250)
+    fc = train(tr, targets=targets, horizons=horizons, base_stride_h=stride, num_boost=220)
     sup_te, _ = make_supervised(te, horizons, target=target, base_stride_h=2)
     pred = fc.predict(sup_te)
 
@@ -124,7 +124,7 @@ def summarize(df: pd.DataFrame) -> dict:
         }
 
     y_aqi = sub_index_series("PM2.5", y)
-    p_aqi = df["aqi_p50"].to_numpy()
+    p_aqi = sub_index_series("PM2.5", df["pm25_p50"].to_numpy())  # consistent w/ PM2.5-only obs
     valid = np.isfinite(y_aqi) & np.isfinite(p_aqi)
     out["overall"]["aqi_category_acc"] = round(float(np.mean(
         [aqi_category(a) == aqi_category(b) for a, b in zip(p_aqi[valid], y_aqi[valid], strict=False)]
@@ -139,13 +139,13 @@ def summarize(df: pd.DataFrame) -> dict:
 
 
 def run(feat: pd.DataFrame, *, horizons: list[int] | None = None, target: str = "pm25",
-        n_folds: int = 3, stride: int = 2) -> dict:
+        n_folds: int = 3, stride: int = 2, targets: list[str] | None = None) -> dict:
     horizons = horizons or DEFAULT_HORIZONS
     feat = feat.sort_values(["station_id", "ts"]).reset_index(drop=True)
     folds = walk_forward_folds(feat, n_folds=n_folds)
     if not folds:
         raise SystemExit("not enough history for a walk-forward backtest — widen the window")
-    frames = [evaluate_fold(feat, f, horizons, target, stride) for f in folds]
+    frames = [evaluate_fold(feat, f, horizons, target, stride, targets) for f in folds]
     frames = [f for f in frames if not f.empty]
     if not frames:
         raise SystemExit("backtest produced no evaluable rows")
@@ -185,10 +185,12 @@ def main(argv=None) -> None:
     ap.add_argument("--features", default=str(SETTINGS.processed_dir / "features.parquet"))
     ap.add_argument("--folds", type=int, default=2)
     ap.add_argument("--stride", type=int, default=3)
+    ap.add_argument("--fast", action="store_true", help="PM2.5 target only (skip PM10/NO2)")
     args = ap.parse_args(argv)
 
     feat = pd.read_parquet(args.features)
-    summary = run(feat, n_folds=args.folds, stride=args.stride)
+    summary = run(feat, n_folds=args.folds, stride=args.stride,
+                  targets=["pm25"] if args.fast else None)
     _print(summary)
     (REGISTRY).mkdir(parents=True, exist_ok=True)
     (REGISTRY / "backtest_metrics.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

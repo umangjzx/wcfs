@@ -24,6 +24,10 @@ models/registry/*.json
 # ui-ux-pro-max / design skills installed by `uipro init` (not project source)
 .claude/skills/
 
+# training run output
+vayucast_model.zip
+
+
 # Notebooks
 .ipynb_checkpoints/
 

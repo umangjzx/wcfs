@@ -38,11 +38,15 @@ _MET_COLS = [
     "t1000", "t925", "t850", "wind_u850", "wind_v850",
 ]
 
-_LAG_COLS = ["pm25", "pm10", "no2", "aqi", "t2m", "blh", "wind_speed10", "isi",
-             "incoming_stubble_load", "ventilation_index"]
-_LAGS = [1, 2, 3, 6, 12, 24, 48]
-_ROLL_COLS = ["pm25", "no2", "blh", "isi", "incoming_stubble_load"]
+_LAG_COLS = ["pm25", "pm10", "no2", "o3", "so2", "co", "aqi",
+             "t2m", "blh", "wind_speed10", "solar", "cloud",
+             "isi", "self_trapping", "ventilation_index",
+             "incoming_stubble_load", "stubble_index", "fire_frp_active"]
+_LAGS = [1, 2, 3, 4, 6, 8, 12, 24, 36, 48]
+_ROLL_COLS = ["pm25", "pm10", "no2", "blh", "isi", "ventilation_index",
+              "incoming_stubble_load", "wind_speed10"]
 _ROLL_WINDOWS = [6, 24]
+_ROLL_EXTRA = {"pm25": ["std", "max"], "no2": ["max"]}  # {col: [aggs]} in addition to mean
 
 
 # ---------------------------------------------------------------------------
@@ -153,16 +157,55 @@ def add_lags(df: pd.DataFrame, cols: list[str], lags: list[int]) -> pd.DataFrame
 
 
 def add_rollings(df: pd.DataFrame, cols: list[str], windows: list[int]) -> pd.DataFrame:
-    """Backward-looking rolling means (shifted 1 h so no target leakage)."""
+    """Backward-looking rolling stats (shifted 1 h so no target leakage)."""
     new = {}
+    g = df.groupby("station_id", sort=False)
     for c in cols:
         if c not in df:
             continue
+        aggs = ["mean", *_ROLL_EXTRA.get(c, [])]
         for w in windows:
-            new[f"{c}_roll{w}"] = df.groupby("station_id", sort=False)[c].transform(
-                lambda s, w=w: s.shift(1).rolling(w, min_periods=max(2, w // 3)).mean()
-            )
+            for agg in aggs:
+                suffix = "roll" if agg == "mean" else f"roll{agg}"
+                new[f"{c}_{suffix}{w}"] = g[c].transform(
+                    lambda s, w=w, agg=agg: getattr(
+                        s.shift(1).rolling(w, min_periods=max(2, w // 3)), agg
+                    )()
+                )
     return df.assign(**new)
+
+
+def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Interaction + regime features assembled from the merged grid (pre-lag)."""
+    d = df.copy()
+    g = d.groupby("station_id", sort=False)
+
+    d["isi_x_pm25"] = d["isi"] * d["pm25"]
+    d["stubble_x_isi"] = d.get("stubble_index", 0.0) * d["isi"]
+    d["pm25_over_pm10"] = d["pm25"] / d["pm10"].where(d["pm10"] > 1)
+
+    # boundary-layer / ventilation tendencies
+    d["blh_tend_6h"] = d["blh"] - g["blh"].shift(6)
+    d["vent_tend_6h"] = d["ventilation_index"] - g["ventilation_index"].shift(6)
+
+    # near-surface wind steadiness over 6 h (vector mean / scalar mean); low => stagnant
+    umean = g["wind_u10"].transform(lambda s: s.shift(1).rolling(6, min_periods=2).mean())
+    vmean = g["wind_v10"].transform(lambda s: s.shift(1).rolling(6, min_periods=2).mean())
+    spdmean = g["wind_speed10"].transform(lambda s: s.shift(1).rolling(6, min_periods=2).mean())
+    d["wind_steadiness_6h"] = (np.hypot(umean, vmean) / spdmean.where(spdmean > 0.1)).clip(0, 1)
+
+    # hours since meaningful rain (scavenging); resets on precip > 0.2 mm/h
+    def _since_rain(s: pd.Series) -> pd.Series:
+        wet = s.fillna(0) > 0.2
+        grp = wet.cumsum()
+        return (~wet).groupby(grp).cumsum()
+
+    d["hours_since_rain"] = g["precip"].transform(_since_rain).clip(upper=240)
+
+    lh = d["local_hour"]
+    d["is_morning_rush"] = lh.between(7, 10).astype("int8")
+    d["is_evening_peak"] = lh.between(18, 22).astype("int8")
+    return d
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +230,12 @@ def build_matrix(obs_long: pd.DataFrame, met: pd.DataFrame,
 
     grid = add_calendar_features(grid)
     grid = grid.sort_values(["station_id", "ts"]).reset_index(drop=True)
+    grid = add_derived_features(grid)
     grid = add_lags(grid, _LAG_COLS, _LAGS)
     grid = add_rollings(grid, _ROLL_COLS, _ROLL_WINDOWS)
-    return grid
+    if "pm25_roll24" in grid:
+        grid["pm25_anom"] = grid["pm25"] - grid["pm25_roll24"]
+    return grid.copy()  # de-fragment after the many column adds
 
 
 FEATURE_GROUPS = {
