@@ -41,8 +41,14 @@ api = [
     "apscheduler>=3.10",
     "httpx>=0.27",
 ]
-# Optional high-fidelity ERA5/GFS path (GRIB + Copernicus CDS). Default ingest uses the
-# Open-Meteo JSON proxy and needs none of this.
+# Historical pressure-level meteorology from ARCO-ERA5 (keyless Zarr on GCS).
+era5 = [
+    "xarray>=2024.1",
+    "zarr>=2.17",
+    "gcsfs>=2024.2",
+    "dask>=2024.1",
+]
+# Optional Copernicus CDS / GRIB path. Default ingest needs none of this.
 gridded = [
     "xarray>=2024.1",
     "cfgrib>=0.9.11",

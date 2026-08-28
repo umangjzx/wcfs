@@ -54,11 +54,9 @@ Progress: [████░░░░░░] 38%
 
 ### Blockers/Concerns
 
-- **Historical pressure-level meteorology (925/850 hPa temps + winds).** Open-Meteo's ERA5 *archive* returns null for pressure levels across all tested dates now (worked once early in the session — likely transient). This degrades, for training history only:
-  - ISI θ-term → dropped (ISI still valid on 3 components; diurnal cycle correct, corr +0.45 with PM2.5)
-  - stubble-plume transport → 10 m wind fallback (weak; corr with PM2.5 currently −0.15)
-  The **serving path is unaffected** — GFS forecast carries all pressure levels.
-  Options to resolve: (A) CDS/ERA5 via `gridded` extra on a VM; (B) ARCO-ERA5 Zarr on GCS (keyless, xarray, complete); (C) accept degradation for 2021–23 winters, document. **Awaiting user decision.**
+- **RESOLVED (documented): historical pressure-level met.** Investigated ARCO-ERA5 (both Zarr stores have corrupt `level` coord / non-unique lat-lon index / 2-min opens from Windows) and Open-Meteo `past_days` (pressure levels only ~2 weeks back). Decision: training history = Open-Meteo ERA5 archive (surface + BLH + cloud, always 100%); ISI runs 3/4 components; stubble transport uses an **Ekman-veered 10 m wind** (`_sfc_to_transport_wind`). Serving path unaffected. `ingest/era5_arco.py` + `weather.py --past-days` kept as upgrade paths for a VM. See PROJECT.md decision.
+
+- **NEXT / real unblock for Phase 4: OpenAQ v3 ground-truth history.** Feature validation is currently against the CAMS PM2.5 *model* proxy, so `corr(stubble_load, pm25) ≈ 0` (CAMS has its own burning emissions, doesn't track FIRMS). Real CPCB winter PM2.5 has large stubble-driven spikes. OpenAQ key is in `.env`. Implement `ingest/cpcb.fetch_history` OpenAQ v3 sensor-walk → real targets → re-validate features → then train.
 
 ## Session Continuity
 

@@ -66,6 +66,7 @@ the "why" behind it.
 | One offline WRF-Chem run for validation only | Proof of physics engagement without HPC on the live path | — Pending |
 | Coupling encoded as engineered features (ISI, plume vector, aerosol→PBL) | Lets the emulator learn the feedback the PS calls out; explainable | — Pending |
 | GFS for inference-time meteorology, ERA5 for training history | ERA5 is reanalysis (past only); GFS is free forecast data | — Pending |
+| Historical meteorology = Open-Meteo ERA5 archive (surface + BLH + cloud); pressure levels (925/850 hPa) NOT available keyless for old dates | Open-Meteo archive omits pressure levels; ARCO-ERA5 Zarr stores have corrupt coords / open too slowly from Windows; CDS needs key+GRIB+queue. ISI runs on 3/4 components (validated), stubble transport uses an Ekman-veered 10 m wind. Serving path (GFS forecast) is full fidelity. `ingest/era5_arco.py` + `weather.py --past-days` kept as upgrade paths. | ⚠️ Revisit (VM/CDS) |
 | React + Vite + MapLibre for the dashboard | Best judge impression; interactive map is core to the demo | — Pending |
 | DuckDB + Parquet, no DB server | Hackathon simplicity; optional Postgres/Timescale compose profile | — Pending |
 | NCR scoped to 5 cities' CAAQMS stations | Keeps ingestion and station metadata tractable | — Pending |

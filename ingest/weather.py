@@ -20,7 +20,14 @@ import numpy as np
 import pandas as pd
 
 from config.settings import SETTINGS, Station, load_stations
-from ingest.common import MET_COLUMNS, SourceResult, get_json, save_snapshot, write_table
+from ingest.common import (
+    MET_COLUMNS,
+    SourceResult,
+    get_json,
+    read_table,
+    save_snapshot,
+    write_table,
+)
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -156,6 +163,36 @@ def fetch_forecast(
                                     f"horizon +{horizon}h from {issue_time.isoformat()}")
 
 
+def fetch_recent_history(
+    stations: list[Station] | None = None, *, past_days: int = 92
+) -> tuple[pd.DataFrame, SourceResult]:
+    """GFS analysis for the last ``past_days`` (<=92), WITH pressure levels.
+
+    Bridges the gap left by the Open-Meteo ERA5 archive, whose pressure-level fields are
+    currently unavailable — so the most recent ~3 months of training history (and, run
+    through the stubble season, the live season itself) has a full-fidelity 850 hPa
+    transport wind and ISI theta-term.
+    """
+    stations = stations or load_stations()
+    past_days = min(past_days, 92)
+    try:
+        blocks = _request(
+            FORECAST_URL, stations,
+            {"past_days": past_days, "forecast_days": 1, "models": "gfs_seamless"},
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _empty(), SourceResult("openmeteo:gfs_hist", ok=False, stale=True,
+                                      message=f"fetch failed ({exc})")
+    frames = [
+        _parse_block(b, b["_station_id"], "reanalysis", "openmeteo:gfs_hist", None)
+        for b in blocks
+    ]
+    df = pd.concat(frames, ignore_index=True) if frames else _empty()
+    df = df[df["ts"] < pd.Timestamp.now(tz="UTC").floor("h")]  # keep past only
+    return df, SourceResult("openmeteo:gfs_hist", ok=not df.empty, rows=len(df),
+                            message=f"{df['station_id'].nunique()} stations, last {past_days}d")
+
+
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(columns=MET_COLUMNS)
 
@@ -169,18 +206,38 @@ def _load(name: str) -> pd.DataFrame | None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="ingest.weather", description=__doc__)
     ap.add_argument("--forecast", action="store_true", help="fetch GFS forecast (default)")
-    ap.add_argument("--history", action="store_true", help="fetch ERA5 reanalysis")
+    ap.add_argument("--history", action="store_true", help="fetch ERA5 reanalysis (surface + BLH)")
+    ap.add_argument("--past-days", type=int, metavar="N",
+                    help="fetch last N days of GFS analysis WITH pressure levels; "
+                         "merge into met_history.parquet")
     ap.add_argument("--start", default="2021-10-01")
     ap.add_argument("--end", default=(dt.date.today() - dt.timedelta(days=6)).isoformat())
     args = ap.parse_args(argv)
 
     SETTINGS.ensure_dirs()
-    if args.history:
+    hist_path = SETTINGS.processed_dir / "met_history.parquet"
+    if args.past_days:
+        df, res = fetch_recent_history(past_days=args.past_days)
+        print(res.as_dict())
+        if not df.empty:
+            if hist_path.exists():
+                prior = read_table(hist_path)
+                df = (pd.concat([prior, df], ignore_index=True)
+                      .drop_duplicates(["station_id", "ts"], keep="last")
+                      .sort_values(["station_id", "ts"]))
+            write_table(df, hist_path)
+            print(f"met_history.parquet now {len(df)} rows")
+    elif args.history:
         df, res = fetch_reanalysis(start=dt.date.fromisoformat(args.start),
                                    end=dt.date.fromisoformat(args.end))
         print(res.as_dict())
         if not df.empty:
-            write_table(df, SETTINGS.processed_dir / "met_history.parquet")
+            if hist_path.exists():
+                prior = read_table(hist_path)
+                df = (pd.concat([prior, df], ignore_index=True)
+                      .drop_duplicates(["station_id", "ts"], keep="last")
+                      .sort_values(["station_id", "ts"]))
+            write_table(df, hist_path)
     else:
         df, res = fetch_forecast()
         print(res.as_dict())

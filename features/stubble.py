@@ -35,6 +35,20 @@ _LOAD_SCALE = 2000.0        # FRP-weighted load that maps to stubble_index ~0.63
 _DILUTION_SCALE_KM = 60.0
 _CARRYOVER_DAYS = 1         # also use yesterday's fires, aged by 24 h
 
+# When 850 hPa wind is unavailable (older reanalysis), approximate the transport-level
+# flow from the 10 m wind: scale the speed up and veer it clockwise (Ekman) toward the
+# free-tropospheric direction over the flat Indo-Gangetic plain.
+_SFC_TO_TRANSPORT_SPEED = 1.6
+_SFC_TO_TRANSPORT_VEER_DEG = 25.0
+
+
+def _sfc_to_transport_wind(u10: np.ndarray, v10: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    ang = np.deg2rad(_SFC_TO_TRANSPORT_VEER_DEG)
+    c, s = np.cos(ang), np.sin(ang)
+    u = _SFC_TO_TRANSPORT_SPEED * (c * u10 - s * v10)
+    v = _SFC_TO_TRANSPORT_SPEED * (s * u10 + c * v10)
+    return u, v
+
 STUBBLE_FEATURE_COLUMNS = [
     "incoming_stubble_load", "stubble_index", "plume_u", "plume_v",
     "plume_from_bearing_deg", "fire_frp_active", "fire_count_active", "nearest_fire_km",
@@ -69,10 +83,13 @@ def compute_stubble_features(
     m = met.copy()
     m["ts"] = pd.to_datetime(m["ts"], utc=True)
     m["date"] = m["ts"].dt.normalize().dt.tz_localize(None)
-    # transport wind: 850 hPa, fall back to 10 m
-    u = m["wind_u850"].fillna(m["wind_u10"]).to_numpy("float64")
-    v = m["wind_v850"].fillna(m["wind_v10"]).to_numpy("float64")
-    m["_u"], m["_v"] = u, v
+    # transport wind: 850 hPa where present, else an Ekman-veered scale-up of the 10 m wind
+    have850 = m["wind_u850"].notna().to_numpy()
+    u_sfc, v_sfc = _sfc_to_transport_wind(
+        m["wind_u10"].to_numpy("float64"), m["wind_v10"].to_numpy("float64")
+    )
+    m["_u"] = np.where(have850, m["wind_u850"].to_numpy("float64"), u_sfc)
+    m["_v"] = np.where(have850, m["wind_v850"].to_numpy("float64"), v_sfc)
 
     results: list[pd.DataFrame] = []
     for sid, g in m.groupby("station_id", sort=False):
