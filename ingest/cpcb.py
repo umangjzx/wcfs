@@ -281,15 +281,22 @@ def fetch_history(
     start: dt.date | None = None,
     end: dt.date | None = None,
 ) -> tuple[pd.DataFrame, SourceResult]:
-    """Historical pollutant series. Prefers OpenAQ ground truth when a key is configured.
+    """Historical pollutant series.
 
-    (OpenAQ v3 sensor-walk is a follow-up; today this returns the Open-Meteo CAMS series,
-    which is model output — good enough to build and demo the pipeline.)
+    Uses OpenAQ v3 ground-truth (real CPCB/CAAQMS measurements) when ``OPENAQ_API_KEY`` is
+    set; otherwise the Open-Meteo CAMS model-output fallback.
     """
     stations = stations or load_stations()
     start = start or (dt.date.today() - dt.timedelta(days=120))
     end = end or dt.date.today()
-    # TODO(02-02+): if SETTINGS.openaq_api_key -> OpenAQ v3 locations/sensors/hours walk
+    try:
+        from ingest.openaq import fetch_history_s3
+
+        obs, res = fetch_history_s3(stations, start, end)
+        if res.ok and not obs.empty:
+            return obs, res
+    except Exception:  # noqa: BLE001 - fall through to the model proxy
+        pass
     return fetch_history_openmeteo(stations, start, end)
 
 
