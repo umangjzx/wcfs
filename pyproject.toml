@@ -69,6 +69,7 @@ exclude = ["tests*", "web*", "wrfchem*", "notebooks*", "data*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [".claude", "data", "web", "notebooks", "wrfchem", "models/registry"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]

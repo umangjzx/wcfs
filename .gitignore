@@ -14,12 +14,15 @@ venv/
 data/raw/
 data/interim/
 data/processed/
-data/snapshots/*.parquet
+data/snapshots/
 models/registry/*.pkl
 models/registry/*.pt
 models/registry/*.txt
 models/registry/*.json
 !models/registry/.gitkeep
+
+# ui-ux-pro-max / design skills installed by `uipro init` (not project source)
+.claude/skills/
 
 # Notebooks
 .ipynb_checkpoints/
