@@ -54,14 +54,25 @@ Very Poor (AQI≥301) POD 0.72 / FAR 0.33 / CSI 0.53 · Severe still weak (CSI 0
 - Dashboard map uses a **self-contained MapLibre style** (no external basemap) — offline-safe; a minimal style must OMIT the `glyphs` key (not set it undefined). `React.StrictMode` removed (double-invoke churns the imperative map).
 - Demo resilience: `demo/snapshot/` committed; API boots from it with no keys/network.
 
-### Pending Todos / stretch
+### Done in the upgrade pass (commits 6f025ff, 965a2a4)
 
-- Vite dev-HMR occasionally leaves the map blank after many hot reloads; a fresh dev server / production build is clean. Harden the map lifecycle (recreate on detached container) if it bites.
-- 04-02 stretch: Temporal Fusion Transformer (needs `dl` extra + training time).
-- Quantile calibration is in-sample → coverage 64%; add conformal calibration on a holdout.
-- Severe-event detection weak → class weighting or a dedicated Severe classifier.
-- AQI from PM2.5 only → forecast PM10/NO2/O3 too for a true multi-pollutant AQI.
-- `runpy` warning on `python -m features.build` — cosmetic.
+- **Conformal quantile calibration** — `models/conformal.py` (CQR, per-horizon additive
+  margins from a held-out tail slice). Replaces the in-sample `interval_k`.
+- **Multi-pollutant** — `MultiForecaster` trains PM2.5 + PM10 + NO2, derives the real
+  CPCB AQI (max sub-index + dominant pollutant). `--fast` = PM2.5 only for iteration.
+- **Feature matrix 167 → 299 cols** — lags to 48 h for 6 pollutants + coupled features,
+  rolling std/max, `isi_x_pm25`, `stubble_x_isi`, `pm25_anom`, blh/vent tendencies,
+  6h wind steadiness, `hours_since_rain`, rush-hour flags.
+- **Rare-event handling** — mild P90-only up-weighting + `event_score()` (~P75) drives
+  alert / event decisions instead of the biased median. (First attempt over-weighted
+  everything → +38 bias; fixed in 965a2a4.)
+- Map lifecycle hardened (recreate on detached container); `features/__init__` lazy
+  (runpy warning gone).
+
+### Still stretch
+
+- Full 3-target train is slow locally — use `notebooks/train_colab.ipynb` on a T4.
+- Temporal Fusion Transformer (04-02) — the `dl` extra + `models/tft.py` slot.
 - OpenRouter key in `.env`, unused (LLM advisories — billing, ask first).
 
 ### Blockers/Concerns
