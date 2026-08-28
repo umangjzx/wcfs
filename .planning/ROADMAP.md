@@ -14,9 +14,9 @@ refresh, then build the React/MapLibre dashboard and package it for the demo.
 - [x] **Phase 2: Data ingestion** - CPCB, ERA5, GFS, FIRMS ingest to Parquet/DuckDB
 - [x] **Phase 3: AQI + coupled feature engineering** - CPCB AQI, Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback
 - [x] **Phase 4: ML forecasting model + backtest** - LightGBM baseline, walk-forward CV, grouped SHAP drivers, serving path (TFT = stretch)
-- [ ] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
-- [ ] **Phase 6: Backend API** - FastAPI endpoints + APScheduler hourly refresh + cache
-- [ ] **Phase 7: Frontend dashboard** - React + Vite + MapLibre: map, time slider, forecast, drivers, alerts
+- [x] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
+- [x] **Phase 6: Backend API** - FastAPI endpoints + APScheduler hourly refresh + cache
+- [x] **Phase 7: Frontend dashboard** - React + Vite + MapLibre: map, time slider, forecast, drivers, alerts
 - [ ] **Phase 8: Integration, packaging, demo polish** - docker-compose, README, offline snapshot, pitch assets
 
 ## Phase Details
@@ -96,7 +96,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: Namelists, pipeline runbook, validation notebook
+- [x] 05-01: Namelists (WPS + WRF-Chem MOZART-MOSAIC, aerosol feedback on), FINN+EDGAR+mozbc pipeline.md, validate.py -> validation.png / VALIDATION.md
 
 ### Phase 6: Backend API
 **Goal**: A single service exposes forecasts, drivers, grid, fires, and alerts, refreshed hourly.
@@ -111,8 +111,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: Endpoints, schemas, services, cache
-- [ ] 06-02: Scheduler, snapshot fallback, model-card
+- [x] 06-01: Endpoints, schemas, services, cache
+- [x] 06-02: Scheduler, snapshot fallback, model-card (routes consolidated in api/routes/endpoints.py)
 
 ### Phase 7: Frontend dashboard
 **Goal**: An interactive NCR dashboard that tells the coupling story.
@@ -127,8 +127,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01: App shell, map, station markers, API client
-- [ ] 07-02: Forecast chart, drivers panel, alerts, time slider, methodology page
+- [x] 07-01: App shell, map (self-contained style), station markers, API client
+- [x] 07-02: Forecast chart, drivers panel, alerts, time slider, methodology drawer
 
 ### Phase 8: Integration, packaging, demo polish
 **Goal**: One command brings up the whole system; demo is resilient.
@@ -156,7 +156,7 @@ Plans:
 | 2. Data ingestion | 2/2 | Complete | 2026-08-28 |
 | 3. AQI + coupled feature engineering | 2/2 | Complete | 2026-08-28 |
 | 4. ML forecasting model + backtest | 2/2 | Complete (real-target re-run pending) | 2026-08-29 |
-| 5. Offline WRF-Chem validation artifact | 0/1 | Not started | - |
-| 6. Backend API | 0/2 | Not started | - |
-| 7. Frontend dashboard | 0/2 | Not started | - |
+| 5. Offline WRF-Chem validation artifact | 1/1 | Complete | 2026-08-29 |
+| 6. Backend API | 2/2 | Complete | 2026-08-29 |
+| 7. Frontend dashboard | 2/2 | Complete | 2026-08-29 |
 | 8. Integration, packaging, demo polish | 0/1 | Not started | - |

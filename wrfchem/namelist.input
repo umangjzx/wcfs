@@ -1,0 +1,130 @@
+! WRF-Chem 4.x - Delhi NCR coupled meteorology-chemistry, Nov 2025 stubble episode.
+! Aerosol direct effect (radiation) AND indirect effect (cloud/PBL) ENABLED - this is
+! the two-way coupling the problem statement asks for.
+
+&time_control
+ run_days                = 12,
+ start_year              = 2025, 2025,
+ start_month             = 11,   11,
+ start_day               = 03,   03,
+ start_hour              = 00,   00,
+ end_year                = 2025, 2025,
+ end_month               = 11,   11,
+ end_day                 = 15,   15,
+ end_hour                = 00,   00,
+ interval_seconds        = 21600,
+ input_from_file         = .true., .true.,
+ history_interval        = 60,   60,
+ frames_per_outfile      = 24,   24,
+ restart                 = .false.,
+ restart_interval        = 1440,
+ io_form_history         = 2,
+ io_form_restart         = 2,
+ io_form_input           = 2,
+ io_form_boundary        = 2,
+ auxinput5_interval_m    = 60, 60,      ! anthropogenic emissions
+ auxinput7_interval_m    = 60, 60,      ! biomass-burning (FINN) emissions
+ auxinput5_inname        = 'wrfchemi_d<domain>_<date>',
+ auxinput7_inname        = 'wrffirechemi_d<domain>_<date>',
+ frames_per_auxinput5    = 1, 1,
+ frames_per_auxinput7    = 1, 1,
+/
+
+&domains
+ time_step               = 45,
+ max_dom                 = 2,
+ e_we                    = 61,  91,
+ e_sn                    = 61,  91,
+ e_vert                  = 45,  45,
+ p_top_requested         = 5000,
+ num_metgrid_levels      = 34,
+ num_metgrid_soil_levels = 4,
+ dx                      = 9000, 3000,
+ dy                      = 9000, 3000,
+ grid_id                 = 1, 2,
+ parent_id               = 0, 1,
+ i_parent_start          = 1, 19,
+ j_parent_start          = 1, 19,
+ parent_grid_ratio       = 1, 3,
+ parent_time_step_ratio  = 1, 3,
+ feedback                = 1,
+ smooth_option           = 0,
+/
+
+&physics
+ mp_physics              = 8,  8,       ! Thompson - supports aerosol-aware option
+ ra_lw_physics           = 4,  4,       ! RRTMG (needed for aerosol direct effect)
+ ra_sw_physics           = 4,  4,       ! RRTMG
+ radt                    = 9,  9,
+ sf_sfclay_physics       = 1,  1,
+ sf_surface_physics      = 2,  2,       ! Noah LSM
+ bl_pbl_physics          = 1,  1,       ! YSU - PBL height diagnostic used by ISI validation
+ bldt                    = 0,  0,
+ cu_physics              = 1,  0,       ! Kain-Fritsch on d01 only
+ cudt                    = 5,  5,
+ aer_ra_feedback         = 1,  1,       ! <<< aerosol -> radiation (direct effect)
+ aer_op_opt              = 1,  1,       ! Maxwell aerosol optical properties
+ progn                   = 1,  1,       ! prognostic droplet number (aerosol indirect)
+ num_land_cat            = 21,
+/
+
+&fdda
+/
+
+&dynamics
+ w_damping               = 1,
+ diff_opt                = 1, 1,
+ km_opt                  = 4, 4,
+ diff_6th_opt            = 0, 0,
+ damp_opt                = 3,
+ zdamp                   = 5000., 5000.,
+ dampcoef                = 0.2, 0.2,
+ khdif                   = 0, 0,
+ kvdif                   = 0, 0,
+ non_hydrostatic         = .true., .true.,
+ moist_adv_opt           = 2, 2,
+ scalar_adv_opt          = 2, 2,
+ chem_adv_opt            = 2, 2,
+/
+
+&bdy_control
+ spec_bdy_width          = 5,
+ spec_zone               = 1,
+ relax_zone              = 4,
+ specified               = .true., .false.,
+ nested                  = .false., .true.,
+/
+
+&chem
+ kemit                   = 1,
+ chem_opt                = 202,   202,   ! MOZART-MOSAIC (4-bin) gas + aerosol
+ bioemdt                 = 30,    30,
+ photdt                  = 30,    30,
+ chemdt                  = 0,     0,
+ io_style_emissions      = 2,
+ emiss_inpt_opt          = 111,   111,   ! MOZART-MOSAIC anthropogenic mapping
+ emiss_opt               = 8,     8,
+ chem_in_opt             = 1,     1,     ! use mozbc chemical initial + boundary conditions
+ phot_opt                = 3,     3,     ! Fast-J photolysis (couples to aerosol/cloud)
+ gas_drydep_opt          = 1,     1,
+ aer_drydep_opt          = 1,     1,
+ bio_emiss_opt           = 3,     3,     ! MEGAN biogenic
+ dust_opt                = 0,
+ dmsemis_opt             = 0,
+ seas_opt                = 0,
+ gas_bc_opt              = 1,     1,
+ gas_ic_opt              = 1,     1,
+ aer_bc_opt              = 1,     1,
+ aer_ic_opt              = 1,     1,
+ have_bcs_chem           = .true., .true.,
+ aer_ra_feedback         = 1,     1,
+ aer_op_opt              = 1,     1,
+ opt_pars_out            = 1,
+ biomass_burn_opt        = 2,     2,     ! FINN plume rise
+ plumerisefire_frq       = 30,    30,
+/
+
+&namelist_quilt
+ nio_tasks_per_group = 0,
+ nio_groups = 1,
+/
