@@ -35,6 +35,7 @@ NRT_SOURCES = ["VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "MODIS_NRT"]
 ARCHIVE_SOURCES = ["VIIRS_SNPP_SP", "MODIS_SP"]
 
 _CLUSTER_RES = 0.1  # degrees
+_MAX_DAY_RANGE = 5  # FIRMS area API hard limit: day range must be in [1..5]
 
 
 def _bbox_param() -> str:
@@ -117,7 +118,7 @@ def fetch_recent(days: int = 3, map_key: str | None = None) -> tuple[pd.DataFram
                          rows=0 if snap is None else len(snap),
                          message="no FIRMS_MAP_KEY; used snapshot"),
         )
-    det = _fetch_sources(map_key, NRT_SOURCES, min(days, 10), None)
+    det = _fetch_sources(map_key, NRT_SOURCES, min(days, _MAX_DAY_RANGE), None)
     clusters = cluster_daily(det)
     if not clusters.empty:
         save_snapshot("firms_clusters", clusters)
@@ -134,7 +135,7 @@ def fetch_history(start: dt.date, end: dt.date, map_key: str | None = None
     all_det: list[pd.DataFrame] = []
     cursor = start
     while cursor <= end:
-        span = min(10, (end - cursor).days + 1)
+        span = min(_MAX_DAY_RANGE, (end - cursor).days + 1)
         all_det.append(_fetch_sources(map_key, ARCHIVE_SOURCES, span, cursor))
         cursor += dt.timedelta(days=span)
     det = pd.concat(all_det, ignore_index=True) if all_det else pd.DataFrame()

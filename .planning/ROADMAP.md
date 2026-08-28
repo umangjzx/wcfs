@@ -12,7 +12,7 @@ refresh, then build the React/MapLibre dashboard and package it for the demo.
 
 - [x] **Phase 1: Scaffold & workflow bootstrap** - Repo skeleton, gsd-core planning artifacts, station + settings config
 - [x] **Phase 2: Data ingestion** - CPCB, ERA5, GFS, FIRMS ingest to Parquet/DuckDB
-- [ ] **Phase 3: AQI + coupled feature engineering** - CPCB AQI, Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback
+- [x] **Phase 3: AQI + coupled feature engineering** - CPCB AQI, Inversion Strength Index, stubble-plume vector, aerosol→PBL feedback
 - [ ] **Phase 4: ML forecasting model + backtest** - LightGBM baseline → TFT, walk-forward CV, SHAP
 - [ ] **Phase 5: Offline WRF-Chem validation artifact** - Namelists, FINN+EDGAR+mozbc runbook, comparison notebook
 - [ ] **Phase 6: Backend API** - FastAPI endpoints + APScheduler hourly refresh + cache
@@ -65,8 +65,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: CPCB AQI module + tests
-- [ ] 03-02: ISI, stubble-plume vector, aerosol→PBL feedback, feature builder
+- [x] 03-01: CPCB AQI module + tests (+ vectorized sub_index_series)
+- [x] 03-02: ISI, stubble-plume vector, aerosol→PBL feedback, calendar, feature builder
 
 ### Phase 4: ML forecasting model + backtest
 **Goal**: A persisted emulator that produces calibrated 72h probabilistic AQI forecasts and beats naive baselines.
@@ -154,7 +154,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Scaffold & workflow bootstrap | 1/1 | Complete | 2026-08-28 |
 | 2. Data ingestion | 2/2 | Complete | 2026-08-28 |
-| 3. AQI + coupled feature engineering | 0/2 | In progress | - |
+| 3. AQI + coupled feature engineering | 2/2 | Complete | 2026-08-28 |
 | 4. ML forecasting model + backtest | 0/2 | Not started | - |
 | 5. Offline WRF-Chem validation artifact | 0/1 | Not started | - |
 | 6. Backend API | 0/2 | Not started | - |

@@ -8,6 +8,7 @@ from aqi.cpcb_aqi import (
     health_advisory,
     rolling_average_concentration,
     sub_index,
+    sub_index_series,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "health_advisory",
     "rolling_average_concentration",
     "sub_index",
+    "sub_index_series",
 ]

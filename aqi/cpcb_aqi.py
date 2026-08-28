@@ -21,6 +21,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 # pollutant -> list of (BP_lo, BP_hi, I_lo, I_hi) segments, ascending.
@@ -168,6 +169,26 @@ def sub_index(pollutant: str, concentration: float | None) -> float | None:
     # above scale: extrapolate on the final segment
     bp_lo, bp_hi, i_lo, i_hi = table[-1]
     return round((i_hi - i_lo) / (bp_hi - bp_lo) * (c - bp_lo) + i_lo, 2)
+
+
+def sub_index_series(pollutant: str, values) -> np.ndarray:
+    """Vectorized :func:`sub_index` for a numpy array / pandas Series of concentrations.
+
+    Negative / NaN concentrations map to NaN. Values above the top breakpoint are
+    linearly extrapolated on the last segment's slope.
+    """
+    table = _SUBINDEX_TABLES[pollutant]
+    xp = np.array([table[0][0]] + [seg[1] for seg in table], dtype="float64")
+    fp = np.array([table[0][2]] + [seg[3] for seg in table], dtype="float64")
+    v = np.asarray(values, dtype="float64")
+    out = np.interp(v, xp, fp)
+
+    bp_lo, bp_hi, i_lo, i_hi = table[-1]
+    slope = (i_hi - i_lo) / (bp_hi - bp_lo)
+    over = v > xp[-1]
+    out[over] = i_hi + slope * (v[over] - bp_hi)
+    out[~np.isfinite(v) | (v < 0)] = np.nan
+    return np.round(out, 2)
 
 
 def aqi_category(aqi: float | None) -> str:
