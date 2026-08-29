@@ -1,7 +1,7 @@
 import maplibregl, { GeoJSONSource, Map as MlMap, Marker } from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { AQI_STEP_EXPR, categoryColor } from "../lib/aqi";
-import { BLANK_DARK_STYLE, DELHI_OUTLINE, NCR_CITY_LABELS, graticule } from "../lib/ncrGeo";
+import { categoryColor } from "../lib/aqi";
+import { BASEMAP_STYLE, BLANK_DARK_STYLE, DELHI_OUTLINE, NCR_CITY_LABELS, graticule } from "../lib/ncrGeo";
 import type { FiresOut, GridOut, Station } from "../types";
 
 const DELHI: [number, number] = [77.209, 28.6139];
@@ -110,12 +110,26 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
     box.current.querySelectorAll(".maplibregl-map").forEach((n) => n.remove()); // orphan HMR canvases
     const m = new maplibregl.Map({
       container: box.current,
-      style: BLANK_DARK_STYLE as maplibregl.StyleSpecification,
+      style: BASEMAP_STYLE as maplibregl.StyleSpecification,
       center: DELHI,
-      zoom: 8.5,
+      zoom: 8.7,
       attributionControl: false,
       preserveDrawingBuffer: true,
       fadeDuration: 0,
+    });
+    // A blocked tile CDN (offline / firewalled venue) must not kill the map — the dark
+    // background + our own vector layers still give a usable picture.
+    let fellBack = false;
+    m.on("error", (e) => {
+      const msg = String((e as { error?: { message?: string } })?.error?.message ?? "");
+      if (!fellBack && /basemap|raster|tile|arcgis/i.test(msg)) {
+        fellBack = true;
+        try {
+          m.setStyle(BLANK_DARK_STYLE as maplibregl.StyleSpecification);
+        } catch {
+          /* keep going */
+        }
+      }
     });
     map.current = m;
     (window as unknown as { __map?: MlMap }).__map = m;
@@ -127,106 +141,148 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
       }),
     );
 
-    m.on("load", () => {
-      m.addSource("grat", { type: "geojson", data: graticule() });
-      m.addLayer({ id: "grat", type: "line", source: "grat", paint: { "line-color": "#1e293b", "line-width": 1 } });
+    // Re-run on every style load (initial + any setStyle fallback) so our overlay
+    // sources/layers survive a basemap swap. Idempotent — guarded by getSource/getLayer.
+    function installOverlays() {
+      const blank = fellBack || !m.getStyle().sources["basemap"];
 
-      m.addSource("outline", { type: "geojson", data: DELHI_OUTLINE });
-      m.addLayer({
-        id: "outline",
-        type: "line",
-        source: "outline",
-        paint: { "line-color": "#475569", "line-width": 1.5, "line-dasharray": [3, 2] },
-      });
+      if (blank && !m.getSource("grat")) {
+        m.addSource("grat", { type: "geojson", data: graticule() });
+        m.addLayer({ id: "grat", type: "line", source: "grat", paint: { "line-color": "#1e293b", "line-width": 1 } });
+      }
+
+      if (!m.getSource("outline")) {
+        m.addSource("outline", { type: "geojson", data: DELHI_OUTLINE });
+        m.addLayer({
+          id: "outline",
+          type: "line",
+          source: "outline",
+          paint: {
+            "line-color": blank ? "#475569" : "#93c5fd",
+            "line-width": 1.5,
+            "line-opacity": blank ? 1 : 0.6,
+            "line-dasharray": [3, 2],
+          },
+        });
+      }
 
       for (const id of ["grid", "plume", "fires", "stations"]) {
-        m.addSource(id, { type: "geojson", data: EMPTY });
+        if (!m.getSource(id)) m.addSource(id, { type: "geojson", data: EMPTY });
       }
-      m.addLayer({
-        id: "grid-blob",
-        type: "circle",
-        source: "grid",
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 20, 10, 46],
-          "circle-color": AQI_STEP_EXPR as unknown as maplibregl.ExpressionSpecification,
-          "circle-blur": 1,
-          "circle-opacity": 0.32,
-        },
-      });
-      m.addLayer({
-        id: "plume-line",
-        type: "line",
-        source: "plume",
-        paint: { "line-color": "#f59e0b", "line-width": 3, "line-opacity": 0.8, "line-dasharray": [2, 1.5] },
-      });
-      m.addLayer({
-        id: "fires-pt",
-        type: "circle",
-        source: "fires",
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "frp"], 0, 2, 600, 8],
-          "circle-color": "#fb923c",
-          "circle-opacity": 0.85,
-          "circle-stroke-color": "#7c2d12",
-          "circle-stroke-width": 0.5,
-        },
-      });
-      m.addLayer({
-        id: "st-halo",
-        type: "circle",
-        source: "stations",
-        paint: {
-          "circle-radius": ["case", ["==", ["get", "sel"], 1], 13, 0],
-          "circle-color": "rgba(248,250,252,0.12)",
-          "circle-stroke-color": "#f8fafc",
-          "circle-stroke-width": 2,
-        },
-      });
-      m.addLayer({
-        id: "st-pt",
-        type: "circle",
-        source: "stations",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": ["get", "color"],
-          "circle-stroke-color": "#0b1220",
-          "circle-stroke-width": 1.5,
-        },
-      });
-
-      for (const c of NCR_CITY_LABELS) {
-        const el = document.createElement("div");
-        el.textContent = c.name;
-        el.style.cssText =
-          "font:600 11px var(--font-mono);color:#94a3b8;letter-spacing:.04em;text-shadow:0 1px 3px #000;pointer-events:none;white-space:nowrap";
-        new Marker({ element: el, anchor: "left" }).setLngLat([c.lon, c.lat]).addTo(m);
+      if (!m.getLayer("grid-heat")) {
+        // Smooth interpolated AQI field. Grid points are a regular lattice, so a
+        // heatmap (weight = AQI, large radius) blends them into a continuous surface
+        // instead of the dot pattern a circle layer leaves.
+        m.addLayer({
+          id: "grid-heat",
+          type: "heatmap",
+          source: "grid",
+          paint: {
+            "heatmap-weight": [
+              "interpolate", ["linear"], ["get", "aqi"],
+              0, 0, 50, 0.15, 100, 0.3, 200, 0.55, 300, 0.75, 400, 0.95,
+            ],
+            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 7, 0.9, 12, 1.3],
+            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 7, 20, 9, 38, 11, 64],
+            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 12, 0.32],
+            "heatmap-color": [
+              "interpolate", ["linear"], ["heatmap-density"],
+              0, "rgba(11,18,32,0)",
+              0.15, "rgba(34,197,94,0.5)",
+              0.35, "rgba(163,193,59,0.55)",
+              0.55, "rgba(234,179,8,0.6)",
+              0.72, "rgba(249,115,22,0.65)",
+              0.88, "rgba(220,38,38,0.7)",
+              1, "rgba(127,29,29,0.8)",
+            ],
+          },
+        });
       }
-
-      const popup = new maplibregl.Popup({ closeButton: false, offset: 10 });
-      m.on("mouseenter", "st-pt", (e) => {
-        m.getCanvas().style.cursor = "pointer";
-        const f = e.features?.[0];
-        if (!f) return;
-        const p = f.properties as Record<string, string>;
-        popup
-          .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
-          .setHTML(
-            `<strong>${p.name}</strong><br/><span style="font-family:var(--font-mono)">AQI ${p.aqi || "—"} · ${p.category || "—"}</span><br/><span style="opacity:.7">${p.city}</span>`,
-          )
-          .addTo(m);
-      });
-      m.on("mouseleave", "st-pt", () => {
-        m.getCanvas().style.cursor = "";
-        popup.remove();
-      });
-      m.on("click", "st-pt", (e) => {
-        const id = e.features?.[0]?.properties?.id as string | undefined;
-        if (id) data.current.onSelect(id);
-      });
+      if (!m.getLayer("plume-line")) {
+        m.addLayer({
+          id: "plume-line",
+          type: "line",
+          source: "plume",
+          paint: { "line-color": "#f59e0b", "line-width": 3, "line-opacity": 0.8, "line-dasharray": [2, 1.5] },
+        });
+      }
+      if (!m.getLayer("fires-pt")) {
+        m.addLayer({
+          id: "fires-pt",
+          type: "circle",
+          source: "fires",
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["get", "frp"], 0, 2, 600, 8],
+            "circle-color": "#fb923c",
+            "circle-opacity": 0.85,
+            "circle-stroke-color": "#7c2d12",
+            "circle-stroke-width": 0.5,
+          },
+        });
+      }
+      if (!m.getLayer("st-halo")) {
+        m.addLayer({
+          id: "st-halo",
+          type: "circle",
+          source: "stations",
+          paint: {
+            "circle-radius": ["case", ["==", ["get", "sel"], 1], 15, 0],
+            "circle-color": "rgba(248,250,252,0.12)",
+            "circle-stroke-color": "#f8fafc",
+            "circle-stroke-width": 2,
+          },
+        });
+      }
+      if (!m.getLayer("st-pt")) {
+        m.addLayer({
+          id: "st-pt",
+          type: "circle",
+          source: "stations",
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 6, 10, 9, 13, 13],
+            "circle-color": ["get", "color"],
+            "circle-stroke-color": "#0b1220",
+            "circle-stroke-width": 2,
+          },
+        });
+      }
 
       ready.current = true;
       redraw();
       requestAnimationFrame(() => m.resize());
+    }
+
+    m.on("style.load", installOverlays);
+
+    // City labels ride above the canvas as HTML markers — add once, independent of style.
+    for (const c of NCR_CITY_LABELS) {
+      const el = document.createElement("div");
+      el.textContent = c.name;
+      el.style.cssText =
+        "font:600 11px var(--font-mono);color:#cbd5e1;letter-spacing:.04em;text-shadow:0 1px 4px #000,0 0 2px #000;pointer-events:none;white-space:nowrap";
+      new Marker({ element: el, anchor: "left" }).setLngLat([c.lon, c.lat]).addTo(m);
+    }
+
+    const popup = new maplibregl.Popup({ closeButton: false, offset: 10 });
+    m.on("mouseenter", "st-pt", (e) => {
+      m.getCanvas().style.cursor = "pointer";
+      const f = e.features?.[0];
+      if (!f) return;
+      const p = f.properties as Record<string, string>;
+      popup
+        .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
+        .setHTML(
+          `<strong>${p.name}</strong><br/><span style="font-family:var(--font-mono)">AQI ${p.aqi || "—"} · ${p.category || "—"}</span><br/><span style="opacity:.7">${p.city}</span>`,
+        )
+        .addTo(m);
+    });
+    m.on("mouseleave", "st-pt", () => {
+      m.getCanvas().style.cursor = "";
+      popup.remove();
+    });
+    m.on("click", "st-pt", (e) => {
+      const id = e.features?.[0]?.properties?.id as string | undefined;
+      if (id) data.current.onSelect(id);
     });
 
     const ro = new ResizeObserver(() => map.current?.resize());

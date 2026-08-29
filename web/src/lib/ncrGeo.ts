@@ -38,8 +38,40 @@ export function graticule(): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features: feats };
 }
 
+// Fallback when no basemap tiles are reachable (offline demo / firewalled venue).
 export const BLANK_DARK_STYLE = {
   version: 8 as const,
   sources: {},
   layers: [{ id: "bg", type: "background" as const, paint: { "background-color": "#0b1220" } }],
+};
+
+// Primary basemap: Esri "Dark Gray Canvas" raster tiles — keyless, dark, reliable.
+// Raster needs no glyphs/sprite, so it renders wherever the CDN is reachable; the
+// dark background shows through if it is not (offline / firewalled venue).
+export const BASEMAP_STYLE = {
+  version: 8 as const,
+  sources: {
+    basemap: {
+      type: "raster" as const,
+      tiles: [
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      maxzoom: 16,
+      attribution: "Esri, HERE, Garmin, © OpenStreetMap contributors",
+    },
+    "basemap-labels": {
+      type: "raster" as const,
+      tiles: [
+        "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      maxzoom: 16,
+    },
+  },
+  layers: [
+    { id: "bg", type: "background" as const, paint: { "background-color": "#0b1220" } },
+    { id: "basemap", type: "raster" as const, source: "basemap", paint: { "raster-opacity": 0.95 } },
+    { id: "basemap-labels", type: "raster" as const, source: "basemap-labels", paint: { "raster-opacity": 0.9 } },
+  ],
 };
