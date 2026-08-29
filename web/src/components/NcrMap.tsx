@@ -170,9 +170,10 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
         if (!m.getSource(id)) m.addSource(id, { type: "geojson", data: EMPTY });
       }
       if (!m.getLayer("grid-heat")) {
-        // Smooth interpolated AQI field. Grid points are a regular lattice, so a
-        // heatmap (weight = AQI, large radius) blends them into a continuous surface
-        // instead of the dot pattern a circle layer leaves.
+        // Smooth interpolated AQI field. Grid points are a ~0.03deg lattice, so the
+        // heatmap radius has to track pixel spacing (which doubles every zoom level)
+        // to keep the surface continuous instead of breaking into blobs when zoomed
+        // in; intensity drops in step so the extra kernel overlap doesn't saturate.
         m.addLayer({
           id: "grid-heat",
           type: "heatmap",
@@ -182,9 +183,13 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
               "interpolate", ["linear"], ["get", "aqi"],
               0, 0, 50, 0.15, 100, 0.3, 200, 0.55, 300, 0.75, 400, 0.95,
             ],
-            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 7, 0.9, 12, 1.3],
-            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 7, 20, 9, 38, 11, 64],
-            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 12, 0.32],
+            "heatmap-intensity": [
+              "interpolate", ["linear"], ["zoom"], 7, 1.0, 9, 1.0, 11, 0.95, 13, 0.8, 15, 0.7,
+            ],
+            "heatmap-radius": [
+              "interpolate", ["linear"], ["zoom"], 7, 22, 9, 42, 11, 115, 13, 380, 15, 900,
+            ],
+            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.5, 12, 0.44, 15, 0.4],
             "heatmap-color": [
               "interpolate", ["linear"], ["heatmap-density"],
               0, "rgba(11,18,32,0)",
