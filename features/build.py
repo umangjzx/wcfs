@@ -153,7 +153,7 @@ def add_aqi(grid: pd.DataFrame) -> pd.DataFrame:
 def add_lags(df: pd.DataFrame, cols: list[str], lags: list[int]) -> pd.DataFrame:
     g = df.groupby("station_id", sort=False)
     new = {f"{c}_lag{L}": g[c].shift(L) for c in cols if c in df for L in lags}
-    return df.assign(**new)
+    return pd.concat([df, pd.DataFrame(new, index=df.index)], axis=1)
 
 
 def add_rollings(df: pd.DataFrame, cols: list[str], windows: list[int]) -> pd.DataFrame:
@@ -172,7 +172,7 @@ def add_rollings(df: pd.DataFrame, cols: list[str], windows: list[int]) -> pd.Da
                         s.shift(1).rolling(w, min_periods=max(2, w // 3)), agg
                     )()
                 )
-    return df.assign(**new)
+    return pd.concat([df, pd.DataFrame(new, index=df.index)], axis=1)
 
 
 def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -205,7 +205,7 @@ def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     lh = d["local_hour"]
     d["is_morning_rush"] = lh.between(7, 10).astype("int8")
     d["is_evening_peak"] = lh.between(18, 22).astype("int8")
-    return d
+    return d.copy()  # de-fragment before the lag/roll concats
 
 
 # ---------------------------------------------------------------------------

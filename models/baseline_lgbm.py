@@ -139,6 +139,8 @@ def train_target(
     feat: pd.DataFrame, target: str, *, horizons: list[int] | None = None,
     base_stride_h: int = 3, num_boost: int | None = None,
 ) -> LGBMForecaster:
+    import gc
+
     import lightgbm as lgb
 
     horizons = horizons or DEFAULT_HORIZONS
@@ -149,8 +151,11 @@ def train_target(
     # coverage (a time-tail split biased the median toward the high season).
     rng = np.random.default_rng(2026)
     is_cal = rng.random(len(sup)) < _CAL_FRACTION
-    fit, cal = sup[~is_cal], sup[is_cal]
-    Xf, yf = fit[cols], fit["target"].to_numpy("float64")
+    Xf = sup.loc[~is_cal, cols]
+    yf = sup.loc[~is_cal, "target"].to_numpy("float64")
+    cal = sup[is_cal].copy()
+    del sup
+    gc.collect()
 
     params = dict(_LGB_PARAMS)
     if num_boost:
@@ -166,8 +171,13 @@ def train_target(
         est.fit(Xf, yf, sample_weight=w, categorical_feature=cat)
         models[float(q)] = est
 
+    del Xf, yf
+    gc.collect()
     fc = LGBMForecaster(models, cols, cat, target, horizons)
-    fc.calibrate(cal if len(cal) > 500 else sup)
+    if len(cal) >= 500:
+        fc.calibrate(cal)
+    del cal
+    gc.collect()
     return fc
 
 
@@ -229,11 +239,15 @@ class MultiForecaster:
 def train(feat: pd.DataFrame, *, targets: list[str] | None = None,
           base_stride_h: int = 3, num_boost: int | None = None,
           horizons: list[int] | None = None) -> MultiForecaster:
+    import gc
+
     targets = targets or TARGETS
-    return MultiForecaster({
-        t: train_target(feat, t, horizons=horizons, base_stride_h=base_stride_h, num_boost=num_boost)
-        for t in targets
-    })
+    out: dict[str, LGBMForecaster] = {}
+    for t in targets:
+        out[t] = train_target(feat, t, horizons=horizons, base_stride_h=base_stride_h,
+                              num_boost=num_boost)
+        gc.collect()  # free the per-target supervised frame before the next one
+    return MultiForecaster(out)
 
 
 def _cmd(argv=None) -> None:

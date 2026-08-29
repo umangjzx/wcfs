@@ -92,12 +92,21 @@ def make_supervised(
 
     x_cols = list(feature_columns(feat))  # includes the t0 target column (persistence signal)
     fut_cols = [c for c in FUTURE_COLS if c in feat.columns]
+    model_cols = list(dict.fromkeys([*x_cols, *[f"f_{c}" for c in fut_cols], "horizon"]))
 
-    base = feat[feat["ts"].dt.hour % base_stride_h == 0].copy()
+    # keep only what we need + downcast floats -> ~half the memory (matters on Colab)
+    keep_base = ["station_id", "ts", target, *[c for c in x_cols if c not in ("station_id",)]]
+    base = feat.loc[feat["ts"].dt.hour % base_stride_h == 0, list(dict.fromkeys(keep_base))].copy()
     if require_target:
         base = base.dropna(subset=[target] + [c for c in ("blh", "t2m") if c in base])
+    for c in base.select_dtypes("float64").columns:
+        base[c] = base[c].astype("float32")
 
     fut_base = feat[["station_id", "ts", target, *fut_cols]].copy()
+    for c in fut_base.select_dtypes("float64").columns:
+        if c != target:
+            fut_base[c] = fut_base[c].astype("float32")
+
     parts = []
     for h in horizons:
         f = fut_base.copy()
@@ -105,13 +114,12 @@ def make_supervised(
         f = f.rename(columns={target: "target", **{c: f"f_{c}" for c in fut_cols}})
         f = f.drop(columns="ts")
         m = base.merge(f, left_on=["station_id", "ts"], right_on=["station_id", "ts0"], how="inner")
-        m["horizon"] = h
-        parts.append(m)
+        parts.append(m.assign(horizon=np.int16(h)))
 
     sup = pd.concat(parts, ignore_index=True)
+    del parts, fut_base, base
     if require_target:
         sup = sup.dropna(subset=["target"])
-    model_cols = list(dict.fromkeys([*x_cols, *[f"f_{c}" for c in fut_cols], "horizon"]))
     return sup, model_cols
 
 

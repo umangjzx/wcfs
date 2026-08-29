@@ -41,7 +41,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--start", default="2025-10-01")
     ap.add_argument("--end", default="2026-02-15")
-    ap.add_argument("--stride", type=int, default=2)
+    ap.add_argument("--stride", type=int, default=3)   # base-row stride; 3-4 keeps Colab RAM in bounds
     ap.add_argument("--num-boost", type=int, default=400)
     ap.add_argument("--folds", type=int, default=2)
     ap.add_argument("--skip-ingest", action="store_true")
