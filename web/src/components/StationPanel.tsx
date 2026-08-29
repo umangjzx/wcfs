@@ -19,7 +19,35 @@ interface Props {
 }
 
 export function StationPanel({ station, forecast, horizon, onHover }: Props) {
-  if (!station) return <div className="card">Select a station on the map.</div>;
+  if (!station)
+    return (
+      <div className="card muted" style={{ fontSize: 13 }}>
+        Select a station marker on the map to see its 72-hour forecast.
+      </div>
+    );
+
+  if (!forecast || forecast.station_id !== station.id) {
+    const b = aqiBand(station.latest_aqi);
+    return (
+      <div className="card fade-in">
+        <div style={{ fontWeight: 600, fontSize: 15 }}>{station.name}</div>
+        <div className="muted" style={{ fontSize: 12 }}>
+          {station.city} · {station.agency}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+          <span className="spinner" />
+          <span className="muted" style={{ fontSize: 13 }}>
+            Loading forecast…{" "}
+            {station.latest_aqi != null && (
+              <>
+                current AQI <b style={{ color: b.color }}>{station.latest_aqi}</b> ({b.label})
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   const points = forecast?.points ?? [];
   const cur = points.find((p) => p.horizon === Math.max(horizon, 1)) ?? points[0];

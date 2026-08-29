@@ -95,9 +95,29 @@ export default function App() {
     }) : fmtRelHour(horizon);
   }, [horizon, forecast]);
 
+  const warming =
+    stations.length === 0 || (grid != null && grid.cells.length === 0 && !forecast);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <TopBar health={health} busy={busy} onRefresh={doRefresh} onMethodology={() => setShowMethod(true)} />
+      {warming && (
+        <div
+          style={{
+            padding: "6px var(--space-4)",
+            background: "#1e293b",
+            borderBottom: "1px solid var(--color-border)",
+            fontSize: 12.5,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <span className="spinner" />
+          Forecast pipeline warming up — the first cycle pulls live CPCB + GFS + FIRMS and
+          builds the feature matrix (~30–60 s). Data appears as it lands.
+        </div>
+      )}
       <AlertsBanner alerts={alerts} onPick={setSelected} />
 
       <div
@@ -138,8 +158,20 @@ export default function App() {
 
       {showMethod && <Methodology onClose={() => setShowMethod(false)} />}
       <style>{`
+        .spinner {
+          width: 12px; height: 12px; border-radius: 999px; flex: none;
+          border: 2px solid var(--color-border); border-top-color: var(--color-primary);
+          animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
         @media (max-width: 1000px) {
           .app-grid { grid-template-columns: 1fr !important; grid-auto-rows: minmax(340px, auto); }
+        }
+        @media (max-width: 640px) {
+          .app-grid { padding: 8px !important; gap: 8px !important; }
+          .topbar-time, .topbar-tagline { display: none !important; }
+          .app-grid > section:first-child > div:first-child { min-height: 300px; }
         }
       `}</style>
     </div>
@@ -173,7 +205,9 @@ function TopBar({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "var(--space-4)",
+        flexWrap: "wrap",
+        rowGap: 6,
+        gap: "var(--space-3)",
         padding: "10px var(--space-4)",
         borderBottom: "1px solid var(--color-border)",
         background: "var(--color-card)",
@@ -183,7 +217,7 @@ function TopBar({
         <h1>
           Vayu<span style={{ color: "var(--color-primary)" }}>Cast</span>
         </h1>
-        <span className="muted" style={{ fontSize: 12 }}>
+        <span className="muted topbar-tagline" style={{ fontSize: 12 }}>
           Delhi NCR · coupled 72-hour AQI forecast
         </span>
       </div>
@@ -193,7 +227,7 @@ function TopBar({
         {health?.model_name === "lgbm" ? "ML emulator" : health?.model_name === "naive" ? "baseline" : "…"}
         {health?.stale ? " · stale" : ""}
       </span>
-      <span className="muted mono-num" style={{ fontSize: 12 }}>updated {refreshed} IST</span>
+      <span className="muted mono-num topbar-time" style={{ fontSize: 12 }}>updated {refreshed} IST</span>
       <button onClick={onMethodology}>Methodology</button>
       <button onClick={onRefresh} disabled={busy} aria-pressed={busy}>
         {busy ? "Refreshing…" : "Refresh"}

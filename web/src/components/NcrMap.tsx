@@ -16,6 +16,12 @@ interface Props {
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
+// MapLibre is imperative and doesn't survive partial hot updates — force a clean full
+// reload when this module (or anything it imports) changes in dev.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => import.meta.hot?.invalidate());
+}
+
 export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -101,6 +107,7 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
       map.current = null;
       ready.current = false;
     }
+    box.current.querySelectorAll(".maplibregl-map").forEach((n) => n.remove()); // orphan HMR canvases
     const m = new maplibregl.Map({
       container: box.current,
       style: BLANK_DARK_STYLE as maplibregl.StyleSpecification,
