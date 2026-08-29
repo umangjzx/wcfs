@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import time
 import unicodedata
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -68,23 +69,43 @@ class HttpError(RuntimeError):
     pass
 
 
+class RateLimited(HttpError):
+    """HTTP 429 — separated so callers can wait much longer for shared-IP throttling."""
+
+
 @retry(
     stop=stop_after_attempt(4),
     wait=wait_exponential(multiplier=1, min=1, max=20),
     retry=retry_if_exception_type((requests.RequestException, HttpError)),
     reraise=True,
 )
-def http_get(url: str, *, params: dict | None = None, headers: dict | None = None,
-             timeout: int = 45) -> requests.Response:
-    """GET with exponential-backoff retry on network errors and 5xx / 429."""
+def _http_get_inner(url: str, *, params, headers, timeout) -> requests.Response:
     hdrs = {"User-Agent": USER_AGENT}
     if headers:
         hdrs.update(headers)
     resp = requests.get(url, params=params, headers=hdrs, timeout=timeout)
-    if resp.status_code >= 500 or resp.status_code == 429:
+    if resp.status_code == 429:
+        raise RateLimited(f"429 from {url}", resp.headers.get("Retry-After"))
+    if resp.status_code >= 500:
         raise HttpError(f"{resp.status_code} from {url}")
     resp.raise_for_status()
     return resp
+
+
+def http_get(url: str, *, params: dict | None = None, headers: dict | None = None,
+             timeout: int = 45, rate_limit_waits: tuple[int, ...] = (30, 75, 150, 300)) -> requests.Response:
+    """GET with exponential-backoff retry on 5xx/network errors, plus a longer,
+    separate wait schedule for 429 (Colab and other shared IPs get throttled hard)."""
+    for wait in (*rate_limit_waits, 0):
+        try:
+            return _http_get_inner(url, params=params, headers=headers, timeout=timeout)
+        except RateLimited as exc:
+            if wait == 0:
+                raise
+            hint = exc.args[1] if len(exc.args) > 1 and exc.args[1] else None
+            delay = int(hint) if hint and str(hint).isdigit() else wait
+            time.sleep(delay)
+    raise RateLimited(f"429 from {url} after {len(rate_limit_waits)} long waits")  # pragma: no cover
 
 
 def get_json(url: str, *, params: dict | None = None, headers: dict | None = None,

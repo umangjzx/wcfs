@@ -216,37 +216,54 @@ def main(argv: list[str] | None = None) -> None:
                          "merge into met_history.parquet")
     ap.add_argument("--start", default="2021-10-01")
     ap.add_argument("--end", default=(dt.date.today() - dt.timedelta(days=6)).isoformat())
+    ap.add_argument("--strict", action="store_true",
+                    help="exit non-zero if nothing new was fetched (for pipelines)")
     args = ap.parse_args(argv)
 
     SETTINGS.ensure_dirs()
     hist_path = SETTINGS.processed_dir / "met_history.parquet"
+    fetched_ok = False
+
+    def _merge_write(df: pd.DataFrame) -> None:
+        if hist_path.exists():
+            prior = read_table(hist_path)
+            df = (pd.concat([prior, df], ignore_index=True)
+                  .drop_duplicates(["station_id", "ts"], keep="last")
+                  .sort_values(["station_id", "ts"]))
+        write_table(df, hist_path)
+
     if args.past_days:
         df, res = fetch_recent_history(past_days=args.past_days)
         print(res.as_dict())
         if not df.empty:
-            if hist_path.exists():
-                prior = read_table(hist_path)
-                df = (pd.concat([prior, df], ignore_index=True)
-                      .drop_duplicates(["station_id", "ts"], keep="last")
-                      .sort_values(["station_id", "ts"]))
-            write_table(df, hist_path)
-            print(f"met_history.parquet now {len(df)} rows")
+            _merge_write(df)
+            fetched_ok = True
+            print(f"met_history.parquet now {len(read_table(hist_path))} rows")
     elif args.history:
-        df, res = fetch_reanalysis(start=dt.date.fromisoformat(args.start),
-                                   end=dt.date.fromisoformat(args.end))
-        print(res.as_dict())
-        if not df.empty:
-            if hist_path.exists():
-                prior = read_table(hist_path)
-                df = (pd.concat([prior, df], ignore_index=True)
-                      .drop_duplicates(["station_id", "ts"], keep="last")
-                      .sort_values(["station_id", "ts"]))
-            write_table(df, hist_path)
+        s, e = dt.date.fromisoformat(args.start), dt.date.fromisoformat(args.end)
+        # month-by-month so a 429 on one chunk doesn't lose the rest, and each
+        # write is incremental (resumable)
+        cursor = s
+        while cursor < e:
+            nxt = min(e, (cursor.replace(day=28) + dt.timedelta(days=8)).replace(day=1))
+            try:
+                df, res = fetch_reanalysis(start=cursor, end=nxt)
+                print(f"  {cursor}..{nxt}: {res.as_dict()}")
+                if not df.empty and res.ok:
+                    _merge_write(df)
+                    fetched_ok = True
+            except Exception as exc:  # noqa: BLE001
+                print(f"  {cursor}..{nxt}: FAILED {exc}")
+            cursor = nxt
     else:
         df, res = fetch_forecast()
         print(res.as_dict())
         if not df.empty:
             write_table(df, SETTINGS.interim_dir / "weather_forecast.parquet")
+            fetched_ok = True
+
+    if args.strict and not fetched_ok:
+        raise SystemExit("weather: nothing fetched (rate-limited or upstream down) — retry")
 
 
 if __name__ == "__main__":

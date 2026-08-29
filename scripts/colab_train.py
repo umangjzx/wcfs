@@ -15,14 +15,26 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _run(mod: str, *args: str) -> None:
+def _run(mod: str, *args: str, check: bool = True) -> int:
     print(f"\n$ python -m {mod} {' '.join(args)}", flush=True)
-    subprocess.run([sys.executable, "-m", mod, *args], check=True, cwd=ROOT)
+    return subprocess.run([sys.executable, "-m", mod, *args], check=check, cwd=ROOT).returncode
+
+
+def _run_retry(mod: str, *args: str, tries: int = 4, wait: int = 150) -> None:
+    """Retry a step that hits shared-IP rate limits (Open-Meteo on Colab)."""
+    for k in range(1, tries + 1):
+        if _run(mod, *args, check=False) == 0:
+            return
+        if k < tries:
+            print(f"  [{mod}] attempt {k}/{tries} failed — waiting {wait}s", flush=True)
+            time.sleep(wait)
+    raise SystemExit(f"{mod} still failing after {tries} attempts — rerun this cell later")
 
 
 def main(argv=None) -> None:
@@ -36,14 +48,34 @@ def main(argv=None) -> None:
     args = ap.parse_args(argv)
     s, e = args.start, args.end
 
+    proc = ROOT / "data" / "processed"
+
+    def _rows(name: str) -> int:
+        p = proc / name
+        if not p.exists():
+            return 0
+        import pyarrow.parquet as pq
+        return pq.ParquetFile(p).metadata.num_rows
+
     if not args.skip_ingest:
-        _run("ingest.openaq", "--start", s, "--end", e)          # real CPCB ground truth (S3, keyless)
-        _run("ingest.cpcb", "--history", "--source", "cams", "--append", "--start", s, "--end", e)
-        _run("ingest.weather", "--history", "--start", s, "--end", e)
-        try:
-            _run("ingest.firms", "--history", "--start", s, "--end", e)   # needs FIRMS_MAP_KEY
-        except subprocess.CalledProcessError:
-            print("FIRMS skipped (no key) — stubble transport uses the wind fallback")
+        # each step is idempotent + skipped if already done, so re-running the cell after
+        # a Colab rate-limit stall resumes cheaply
+        if _rows("obs_history.parquet") < 200_000:
+            _run("ingest.openaq", "--start", s, "--end", e)          # real CPCB (S3, keyless)
+            _run("ingest.cpcb", "--history", "--source", "cams", "--append", "--start", s, "--end", e)
+        else:
+            print("obs_history.parquet already populated — skipping OpenAQ/CAMS")
+        if _rows("met_history.parquet") < 150_000:
+            _run_retry("ingest.weather", "--history", "--strict", "--start", s, "--end", e)
+        else:
+            print("met_history.parquet already populated — skipping weather")
+        if _rows("fires_history.parquet") == 0:
+            if _run("ingest.firms", "--history", "--start", s, "--end", e, check=False) != 0:
+                print("FIRMS skipped (no/blocked key) — stubble transport uses the wind fallback")
+
+    met = ROOT / "data" / "processed" / "met_history.parquet"
+    if not met.exists():
+        raise SystemExit(f"{met} missing — the weather ingest never succeeded; rerun the cell")
 
     _run("features.build", "--history", "--start", s, "--end", e)
     _run("models.train", "--stride", str(args.stride), "--num-boost", str(args.num_boost))
