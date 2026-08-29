@@ -1,0 +1,152 @@
+{
+  "n": 492162,
+  "by_horizon": {
+    "1": {
+      "MAE_model": 15.04,
+      "MAE_persist": 15.36,
+      "skill_vs_persist": 0.021
+    },
+    "2": {
+      "MAE_model": 23.82,
+      "MAE_persist": 26.01,
+      "skill_vs_persist": 0.084
+    },
+    "3": {
+      "MAE_model": 29.61,
+      "MAE_persist": 34.19,
+      "skill_vs_persist": 0.134
+    },
+    "6": {
+      "MAE_model": 37.95,
+      "MAE_persist": 49.46,
+      "skill_vs_persist": 0.233
+    },
+    "9": {
+      "MAE_model": 39.77,
+      "MAE_persist": 56.91,
+      "skill_vs_persist": 0.301
+    },
+    "12": {
+      "MAE_model": 39.75,
+      "MAE_persist": 59.66,
+      "skill_vs_persist": 0.334
+    },
+    "18": {
+      "MAE_model": 40.37,
+      "MAE_persist": 61.77,
+      "skill_vs_persist": 0.346
+    },
+    "24": {
+      "MAE_model": 39.53,
+      "MAE_persist": 48.12,
+      "skill_vs_persist": 0.178
+    },
+    "30": {
+      "MAE_model": 40.49,
+      "MAE_persist": 64.27,
+      "skill_vs_persist": 0.37
+    },
+    "36": {
+      "MAE_model": 41.24,
+      "MAE_persist": 66.5,
+      "skill_vs_persist": 0.38
+    },
+    "42": {
+      "MAE_model": 41.5,
+      "MAE_persist": 67.48,
+      "skill_vs_persist": 0.385
+    },
+    "48": {
+      "MAE_model": 41.09,
+      "MAE_persist": 57.05,
+      "skill_vs_persist": 0.28
+    },
+    "54": {
+      "MAE_model": 41.76,
+      "MAE_persist": 69.59,
+      "skill_vs_persist": 0.4
+    },
+    "60": {
+      "MAE_model": 42.35,
+      "MAE_persist": 69.05,
+      "skill_vs_persist": 0.387
+    },
+    "66": {
+      "MAE_model": 42.46,
+      "MAE_persist": 68.79,
+      "skill_vs_persist": 0.383
+    },
+    "72": {
+      "MAE_model": 42.06,
+      "MAE_persist": 57.94,
+      "skill_vs_persist": 0.274
+    }
+  },
+  "overall": {
+    "model": {
+      "MAE": 37.17,
+      "RMSE": 54.75,
+      "bias": 4.24,
+      "pinball_p10": 8.73,
+      "pinball_p90": 11.99,
+      "cov_p10_p90": 0.717
+    },
+    "persistence": {
+      "MAE": 53.95,
+      "RMSE": 80.54,
+      "bias": 2.0
+    },
+    "climatology": {
+      "MAE": 62.75,
+      "RMSE": 85.23,
+      "bias": 17.34
+    },
+    "aqi_category_acc": 0.483
+  },
+  "events": {
+    "very_poor": {
+      "model": {
+        "POD": 0.955,
+        "FAR": 0.436,
+        "CSI": 0.549,
+        "n_events": 225439
+      },
+      "persistence": {
+        "POD": 0.612,
+        "FAR": 0.403,
+        "CSI": 0.433,
+        "n_events": 225439
+      }
+    },
+    "severe": {
+      "model": {
+        "POD": 0.387,
+        "FAR": 0.762,
+        "CSI": 0.173,
+        "n_events": 22022
+      },
+      "persistence": {
+        "POD": 0.192,
+        "FAR": 0.814,
+        "CSI": 0.104,
+        "n_events": 22022
+      }
+    }
+  },
+  "folds": [
+    {
+      "train_end": "2026-01-01 23:00:00+00:00",
+      "test": [
+        "2026-01-03 23:00:00+00:00",
+        "2026-01-24 23:00:00+00:00"
+      ]
+    },
+    {
+      "train_end": "2026-01-22 23:00:00+00:00",
+      "test": [
+        "2026-01-24 23:00:00+00:00",
+        "2026-02-14 23:00:00+00:00"
+      ]
+    }
+  ]
+}

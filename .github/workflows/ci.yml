@@ -34,3 +34,21 @@ jobs:
       - run: npm install --no-audit --no-fund --ignore-scripts && npm rebuild esbuild
       - name: Type-check + build
         run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build api image
+        run: docker build -f api/Dockerfile -t vayucast-api .
+      - name: Build web image
+        run: docker build -f web/Dockerfile -t vayucast-web .
+      - name: Smoke-test api container
+        run: |
+          docker run -d --name api -p 8000:8000 -e VAYUCAST_BOOT_INGEST=0 vayucast-api
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/api/health && break || sleep 2
+          done
+          curl -sf http://localhost:8000/api/health | grep -q '"status":"ok"'
+          curl -sf http://localhost:8000/api/stations | grep -q '"id":"DEL-'
+          docker rm -f api

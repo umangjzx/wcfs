@@ -15,11 +15,14 @@ data/raw/
 data/interim/
 data/processed/
 data/snapshots/
-models/registry/*.pkl
-models/registry/*.pt
-models/registry/*.txt
-models/registry/*.json
+models/registry/*
+# ...but DO commit the trained model so a fresh clone / Docker image ships something
+# that works (swap in the Colab 3-target model when ready).
 !models/registry/.gitkeep
+!models/registry/lgbm_*.txt
+!models/registry/*_meta.json
+!models/registry/registry_index.json
+!models/registry/backtest_metrics.json
 
 # ui-ux-pro-max / design skills installed by `uipro init` (not project source)
 .claude/skills/
