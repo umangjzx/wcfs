@@ -152,16 +152,16 @@ export function NcrMap({ stations, grid, fires, selected, onSelect }: Props) {
       }
 
       if (!m.getSource("outline")) {
+        // Real Delhi NCT admin boundary (Census 2011). Solid, thin — it's exact, not a sketch.
         m.addSource("outline", { type: "geojson", data: DELHI_OUTLINE });
         m.addLayer({
           id: "outline",
           type: "line",
           source: "outline",
           paint: {
-            "line-color": blank ? "#475569" : "#93c5fd",
-            "line-width": 1.5,
-            "line-opacity": blank ? 1 : 0.6,
-            "line-dasharray": [3, 2],
+            "line-color": blank ? "#64748b" : "#a9c7f5",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 7, 1, 11, 1.8],
+            "line-opacity": blank ? 0.9 : 0.7,
           },
         });
       }

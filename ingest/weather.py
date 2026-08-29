@@ -26,7 +26,6 @@ from ingest.common import (
     SourceResult,
     get_json,
     read_table,
-    save_snapshot,
     write_table,
 )
 
@@ -130,13 +129,10 @@ def fetch_reanalysis(
             {"start_date": start.isoformat(), "end_date": end.isoformat(), "models": "era5_seamless"},
         )
     except Exception as exc:  # noqa: BLE001
-        snap = _load("met_reanalysis")
-        return snap if snap is not None else _empty(), SourceResult(
-            "openmeteo:era5", ok=snap is not None, stale=True,
-            message=f"fetch failed ({exc}); used snapshot")
+        return _empty(), SourceResult(
+            "openmeteo:era5", ok=False, message=f"fetch failed ({exc})")
     frames = [_parse_block(b, b["_station_id"], "reanalysis", "openmeteo:era5", None) for b in blocks]
     df = pd.concat(frames, ignore_index=True) if frames else _empty()
-    save_snapshot("met_reanalysis", df)
     return df, SourceResult("openmeteo:era5", ok=not df.empty, rows=len(df),
                             message=f"{df['station_id'].nunique()} stations {start}..{end}")
 
@@ -152,15 +148,12 @@ def fetch_forecast(
             {"forecast_days": forecast_days, "past_days": past_days, "models": "gfs_seamless"},
         )
     except Exception as exc:  # noqa: BLE001
-        snap = _load("met_forecast")
-        return snap if snap is not None else _empty(), SourceResult(
-            "openmeteo:gfs", ok=snap is not None, stale=True,
-            message=f"fetch failed ({exc}); used snapshot")
+        return _empty(), SourceResult(
+            "openmeteo:gfs", ok=False, message=f"fetch failed ({exc})")
     frames = [
         _parse_block(b, b["_station_id"], "forecast", "openmeteo:gfs", issue_time) for b in blocks
     ]
     df = pd.concat(frames, ignore_index=True) if frames else _empty()
-    save_snapshot("met_forecast", df)
     horizon = df.loc[df["lead_h"] >= 0, "lead_h"].max() if not df.empty else 0
     return df, SourceResult("openmeteo:gfs", ok=not df.empty, rows=len(df),
                             message=f"{df['station_id'].nunique()} stations, "
@@ -199,12 +192,6 @@ def fetch_recent_history(
 
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(columns=MET_COLUMNS)
-
-
-def _load(name: str) -> pd.DataFrame | None:
-    from ingest.common import load_snapshot
-
-    return load_snapshot(name)
 
 
 def main(argv: list[str] | None = None) -> None:

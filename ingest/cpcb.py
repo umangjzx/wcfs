@@ -25,10 +25,8 @@ from ingest.common import (
     SourceResult,
     empty_obs,
     get_json,
-    load_snapshot,
     merge_observations,
     normalize_name,
-    save_snapshot,
     to_utc,
     write_table,
 )
@@ -176,49 +174,45 @@ def reconcile_stations(
     return df, unmatched
 
 
+def _fetch_reconciled(
+    api_key: str, *, cities: list[str] | None = None, limit: int = 5000
+) -> tuple[pd.DataFrame, list[str]]:
+    """One live data.gov.in pull -> reconciled rows (station_id + lat/lon) and unmatched names."""
+    cities = cities or NCR_CITIES
+    city_norms = {normalize_name(c) for c in cities}
+    payload = get_json(
+        DATA_GOV_URL, params={"api-key": api_key, "format": "json", "limit": limit}
+    )
+    records = payload.get("records", []) if isinstance(payload, dict) else []
+    parsed = parse_realtime_records(records)
+    if not parsed.empty:
+        parsed = parsed[parsed["city"].map(normalize_name).isin(city_norms)]
+    return reconcile_stations(parsed)
+
+
 def fetch_realtime(
     api_key: str | None = None, *, cities: list[str] | None = None, limit: int = 5000
 ) -> tuple[pd.DataFrame, SourceResult]:
-    """Fetch the current CPCB snapshot. Falls back to the saved snapshot on any failure."""
+    """Fetch the current CPCB observations live. No cache: on any failure returns empty."""
     api_key = api_key or SETTINGS.data_gov_in_api_key
-    cities = cities or NCR_CITIES
-    city_norms = {normalize_name(c) for c in cities}
-
     if not api_key:
-        snap = load_snapshot("cpcb_realtime")
-        return (
-            snap if snap is not None else empty_obs(),
-            SourceResult("cpcb:data.gov.in", ok=snap is not None, rows=0 if snap is None else len(snap),
-                         stale=True, message="no DATA_GOV_IN_API_KEY; used snapshot"),
+        return empty_obs(), SourceResult(
+            "cpcb:data.gov.in", ok=False, rows=0, message="no DATA_GOV_IN_API_KEY set"
         )
 
     try:
-        payload = get_json(
-            DATA_GOV_URL,
-            params={"api-key": api_key, "format": "json", "limit": limit},
-        )
-        records = payload.get("records", []) if isinstance(payload, dict) else []
-        parsed = parse_realtime_records(records)
-        if not parsed.empty:
-            parsed = parsed[parsed["city"].map(normalize_name).isin(city_norms)]
-        reconciled, unmatched = reconcile_stations(parsed)
+        reconciled, unmatched = _fetch_reconciled(api_key, cities=cities, limit=limit)
         obs = (
             reconciled.dropna(subset=["station_id"])[["station_id", "ts", "pollutant", "value", "source"]]
             .reset_index(drop=True)
         )
-        save_snapshot("cpcb_realtime", obs)
-        save_snapshot("cpcb_realtime_meta", reconciled)  # keeps lat/lon for --sync-stations
         msg = f"{len(obs)} obs, {obs['station_id'].nunique()} stations"
         if unmatched:
             msg += f"; {len(unmatched)} unmatched feed names"
-        return obs[OBS_COLUMNS], SourceResult("cpcb:data.gov.in", ok=True, rows=len(obs), message=msg)
-    except Exception as exc:  # noqa: BLE001 - degrade gracefully
-        snap = load_snapshot("cpcb_realtime")
-        return (
-            snap if snap is not None else empty_obs(),
-            SourceResult("cpcb:data.gov.in", ok=snap is not None,
-                         rows=0 if snap is None else len(snap), stale=True,
-                         message=f"live fetch failed ({exc}); used snapshot"),
+        return obs[OBS_COLUMNS], SourceResult("cpcb:data.gov.in", ok=not obs.empty, rows=len(obs), message=msg)
+    except Exception as exc:  # noqa: BLE001 - report the failure, serve nothing
+        return empty_obs(), SourceResult(
+            "cpcb:data.gov.in", ok=False, rows=0, message=f"live fetch failed ({exc})"
         )
 
 
@@ -304,10 +298,17 @@ def fetch_history(
 # Station coordinate reconciliation
 # ---------------------------------------------------------------------------
 def propose_station_coords() -> pd.DataFrame:
-    """Compare registry coords with the feed's reported lat/lon (from the last realtime pull)."""
-    meta = load_snapshot("cpcb_realtime_meta")
-    if meta is None or meta.empty:
-        return pd.DataFrame(columns=["station_id", "reg_lat", "reg_lon", "feed_lat", "feed_lon", "km_off"])
+    """Compare registry coords with the feed's reported lat/lon from a fresh live pull."""
+    cols = ["station_id", "reg_lat", "reg_lon", "feed_lat", "feed_lon", "km_off"]
+    api_key = SETTINGS.data_gov_in_api_key
+    if not api_key:
+        return pd.DataFrame(columns=cols)
+    try:
+        meta, _ = _fetch_reconciled(api_key)
+    except Exception:  # noqa: BLE001
+        return pd.DataFrame(columns=cols)
+    if meta.empty:
+        return pd.DataFrame(columns=cols)
     reg = {s.id: s for s in load_stations()}
     feed = (
         meta.dropna(subset=["station_id", "lat", "lon"])
@@ -374,13 +375,12 @@ def _cmd_history(start: str, end: str, source: str, append: bool) -> None:
         if append and out.exists():
             df = merge_observations(pd.read_parquet(out), df)
         write_table(df, out)
-        save_snapshot("cpcb_history", df)
 
 
 def _cmd_sync_stations(write: bool) -> None:
     df = propose_station_coords()
     if df.empty:
-        print("No feed metadata yet — run `python -m ingest.cpcb --once` first.")
+        print("No feed metadata — set DATA_GOV_IN_API_KEY (the live pull returned nothing).")
         return
     print(df.to_string(index=False))
     if write:

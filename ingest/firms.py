@@ -23,8 +23,6 @@ from ingest.common import (
     FIRE_COLUMNS,
     SourceResult,
     http_get,
-    load_snapshot,
-    save_snapshot,
     write_table,
 )
 
@@ -109,19 +107,13 @@ def _fetch_sources(map_key: str, sources: list[str], days: int, start: dt.date |
 
 
 def fetch_recent(days: int = 3, map_key: str | None = None) -> tuple[pd.DataFrame, SourceResult]:
+    """Fetch current FIRMS fire clusters live. No cache: on failure returns empty."""
     map_key = map_key or SETTINGS.firms_map_key
     if not map_key:
-        snap = load_snapshot("firms_clusters")
-        return (
-            snap if snap is not None else pd.DataFrame(columns=FIRE_COLUMNS),
-            SourceResult("firms", ok=snap is not None, stale=True,
-                         rows=0 if snap is None else len(snap),
-                         message="no FIRMS_MAP_KEY; used snapshot"),
-        )
+        return pd.DataFrame(columns=FIRE_COLUMNS), SourceResult(
+            "firms", ok=False, rows=0, message="no FIRMS_MAP_KEY set")
     det = _fetch_sources(map_key, NRT_SOURCES, min(days, _MAX_DAY_RANGE), None)
     clusters = cluster_daily(det)
-    if not clusters.empty:
-        save_snapshot("firms_clusters", clusters)
     return clusters, SourceResult("firms", ok=not clusters.empty, rows=len(clusters),
                                   message=f"{len(det)} detections -> {len(clusters)} daily clusters")
 

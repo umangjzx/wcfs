@@ -24,8 +24,6 @@ from tenacity import (
     wait_exponential,
 )
 
-from config.settings import SETTINGS
-
 IST = ZoneInfo("Asia/Kolkata")
 UTC = dt.UTC
 
@@ -129,7 +127,7 @@ def normalize_name(text: str) -> str:
     return _WS.sub(" ", text.lower()).strip()
 
 
-# --- Parquet + snapshot I/O -------------------------------------------------
+# --- Parquet I/O ----------------------------------------------------------
 def write_table(df: pd.DataFrame, path: Path | str) -> Path:
     """Write a DataFrame to Parquet, creating parent dirs."""
     path = Path(path)
@@ -140,22 +138,6 @@ def write_table(df: pd.DataFrame, path: Path | str) -> Path:
 
 def read_table(path: Path | str) -> pd.DataFrame:
     return pd.read_parquet(path)
-
-
-def snapshot_path(name: str) -> Path:
-    return SETTINGS.snapshots_dir / f"{name}.parquet"
-
-
-def save_snapshot(name: str, df: pd.DataFrame) -> Path:
-    """Persist a 'last known good' copy used when a live source is unavailable."""
-    return write_table(df, snapshot_path(name))
-
-
-def load_snapshot(name: str) -> pd.DataFrame | None:
-    p = snapshot_path(name)
-    if p.exists():
-        return pd.read_parquet(p)
-    return None
 
 
 def merge_observations(*frames: pd.DataFrame) -> pd.DataFrame:

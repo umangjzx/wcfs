@@ -55,12 +55,8 @@ class Settings(BaseSettings):
     def processed_dir(self) -> Path:
         return self.data_dir / "processed"
 
-    @property
-    def snapshots_dir(self) -> Path:
-        return self.data_dir / "snapshots"
-
     def ensure_dirs(self) -> None:
-        for d in (self.raw_dir, self.interim_dir, self.processed_dir, self.snapshots_dir):
+        for d in (self.raw_dir, self.interim_dir, self.processed_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 
