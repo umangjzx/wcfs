@@ -12,10 +12,10 @@ from models.baseline_lgbm import LGBMForecaster, MultiForecaster, train
 from models.conformal import coverage_report, cqr_margins
 from models.dataset import DEFAULT_HORIZONS, TARGETS, make_supervised
 from models.drivers import explain, explain_station_forecast
-from models.serving import forecast, naive_forecast, peak_alerts
+from models.serving import forecast, peak_alerts
 
 __all__ = [
     "LGBMForecaster", "MultiForecaster", "train", "make_supervised", "DEFAULT_HORIZONS",
     "TARGETS", "cqr_margins", "coverage_report",
-    "explain", "explain_station_forecast", "forecast", "naive_forecast", "peak_alerts",
+    "explain", "explain_station_forecast", "forecast", "peak_alerts",
 ]

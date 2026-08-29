@@ -16,14 +16,13 @@ COPY features ./features
 COPY models ./models
 COPY api ./api
 
-# editable so config.settings.REPO_ROOT resolves to /app (where the model + snapshot land)
+# editable so config.settings.REPO_ROOT resolves to /app (where the model lands)
 RUN pip install --upgrade pip && pip install -e ".[model,api,postgres]"
 
-# Bundled model + demo snapshot make the container demoable with no network.
+# Ship the trained model so the container can forecast as soon as it has live data.
 COPY models/registry ./models/registry
-COPY demo/snapshot ./data/snapshots
 
 EXPOSE 8000
-# Boot from the bundled snapshot; refresh in the background once online.
-ENV VAYUCAST_BOOT_INGEST=0 VAYUCAST_REFRESH_MIN=60
+# Live-data only: ingest real CPCB/GFS/FIRMS on boot, then hourly. No bundled snapshot.
+ENV VAYUCAST_BOOT_INGEST=1 VAYUCAST_REFRESH_MIN=60
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

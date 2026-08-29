@@ -1,9 +1,9 @@
 """Compare offline WRF-Chem surface PM2.5 against CPCB for the Nov-2025 stubble episode.
 
     python wrfchem/validate.py --wrfout run/wrfout_d02_2025-11-05_00:00:00
-    python wrfchem/validate.py                      # no run available -> reference mode
 
-Writes wrfchem/validation.png and wrfchem/VALIDATION.md.
+Needs a real WRF-Chem output file. Writes wrfchem/validation.png and wrfchem/VALIDATION.md
+from the actual run vs CPCB ground truth. There is no synthetic fallback.
 """
 
 from __future__ import annotations
@@ -21,8 +21,9 @@ EVENT_START = dt.date(2025, 11, 5)
 EVENT_END = dt.date(2025, 11, 15)
 HERE = Path(__file__).resolve().parent
 
-# Published skill for the Delhi WRF-Chem system during a burning episode
-# (GMD 17, 2617-2649, 2024 -- DSS v1.0, Table 6 / Fig 9, PM2.5).
+# Published skill for the Delhi WRF-Chem system during a burning episode, for context
+# only (GMD 17, 2617-2649, 2024 -- DSS v1.0, Table 6 / Fig 9, PM2.5). Never substituted
+# for our own run.
 _REF_SKILL = {"NMB": -0.16, "r": 0.71, "RMSE": 46.0}
 
 
@@ -69,23 +70,6 @@ def _wrfchem_from_run(wrfout: Path, obs_index: pd.DatetimeIndex) -> pd.Series:
     return dm.reindex(obs_index, method="nearest")
 
 
-def _wrfchem_reference(cpcb: pd.Series) -> pd.Series:
-    """Synthetic 'WRF-Chem-like' series with the paper's documented episode skill.
-
-    Not a fresh run -- a clearly-labelled reference so the comparison still builds
-    without a VM. Applies the published negative mean bias, correlation and RMSE.
-    """
-    rng = np.random.default_rng(20251105)
-    anom = cpcb - cpcb.mean()
-    keep = _REF_SKILL["r"]
-    noise = rng.normal(0, anom.std() * np.sqrt(max(1 - keep**2, 0)), len(cpcb))
-    sim = cpcb.mean() * (1 + _REF_SKILL["NMB"]) + keep * anom + noise
-    # nudge RMSE toward target
-    resid = sim - cpcb
-    sim = cpcb + resid * (_REF_SKILL["RMSE"] / max(np.sqrt((resid**2).mean()), 1e-6))
-    return pd.Series(np.clip(sim.values, 5, None), index=cpcb.index, name="wrfchem")
-
-
 def _stats(sim: np.ndarray, obs: np.ndarray) -> dict:
     m = np.isfinite(sim) & np.isfinite(obs)
     s, o = sim[m], obs[m]
@@ -103,16 +87,15 @@ def main(argv=None) -> None:
     ap.add_argument("--wrfout", type=Path, default=None)
     args = ap.parse_args(argv)
 
+    if not args.wrfout or not args.wrfout.exists():
+        raise SystemExit(
+            "validate.py needs a real WRF-Chem output: --wrfout run/wrfout_d02_2025-11-05_00:00:00\n"
+            "Run the model first (see wrfchem/README.md + pipeline.md). No synthetic fallback."
+        )
+
     cpcb = _cpcb_event_obs()
-    mode = "run"
-    try:
-        if args.wrfout and args.wrfout.exists():
-            sim = _wrfchem_from_run(args.wrfout, cpcb.index)
-        else:
-            raise FileNotFoundError
-    except Exception:  # noqa: BLE001
-        sim = _wrfchem_reference(cpcb)
-        mode = "reference (no wrfout -- published DSS v1.0 episode skill)"
+    sim = _wrfchem_from_run(args.wrfout, cpcb.index)
+    mode = f"run ({args.wrfout.name})"
 
     st = _stats(sim.to_numpy(), cpcb.to_numpy())
 
@@ -150,20 +133,20 @@ def main(argv=None) -> None:
 
 **Mode:** {mode}
 **Event:** {EVENT_START} .. {EVENT_END}  ({st['n']} hourly NCR-mean pairs)
+**Ground truth:** CPCB / OpenAQ surface PM2.5, NCR station mean.
 
-| metric | value | note |
+| metric | this run | DSS v1.0 episode (GMD 17, 2617, 2024) |
 | --- | --- | --- |
-| Mean bias | {st['MB']} ug/m3 | WRF-Chem tends slightly low (aerosol + fire emissions) |
-| Norm. mean bias | {st['NMB_%']} % | cf. DSS v1.0 episode NMB ~ {_REF_SKILL['NMB']*100:.0f} % |
-| RMSE | {st['RMSE']} ug/m3 | cf. DSS v1.0 ~ {_REF_SKILL['RMSE']:.0f} ug/m3 |
-| Correlation r | {st['r']} | captures the buildup + clearance timing |
+| Mean bias | {st['MB']} ug/m3 | - |
+| Norm. mean bias | {st['NMB_%']} % | ~ {_REF_SKILL['NMB'] * 100:.0f} % |
+| RMSE | {st['RMSE']} ug/m3 | ~ {_REF_SKILL['RMSE']:.0f} ug/m3 |
+| Correlation r | {st['r']} | ~ {_REF_SKILL['r']:.2f} |
 
 ![validation](validation.png)
 
-The run reproduces the episode shape - PM2.5 rising from ~120 to ~250 ug/m3 as the
-Punjab/Haryana fire count peaks and the boundary layer collapses, then clearing when
-the transport wind shifts. The ML emulator's Inversion Strength Index and stubble-plume
-transport features are tuned so their behaviour is consistent with this run.
+Surface PM2.5 = dry sum of so4/no3/nh4/oc/bc/oin over the 4 MOSAIC bins, model level 1,
+nearest grid cell to each CPCB station. The DSS v1.0 column is the published Delhi
+WRF-Chem skill for a comparable burning episode, shown for context only.
 """,
         encoding="utf-8",
     )

@@ -23,7 +23,7 @@ def health():
         store_on = False
     return {
         "status": "ok",
-        "model_loaded": STATE.model_name not in ("none", "naive"),
+        "model_loaded": STATE.model_name == "lgbm",
         "model_name": STATE.model_name,
         "last_refresh": STATE.last_refresh,
         "stale": STATE.stale,
@@ -147,7 +147,7 @@ def grid(horizon: int = Query(0, ge=0, le=72)):
 def drivers(station_id: str):
     d = STATE.drivers.get(station_id)
     if d is None:
-        raise HTTPException(404, f"no drivers for {station_id} (model may be running the naive fallback)")
+        raise HTTPException(404, f"no drivers for {station_id} yet — forecast not ready, call POST /api/refresh")
     return {
         "station_id": station_id,
         "isi": d.get("isi"),
@@ -210,6 +210,7 @@ def model_card():
             horizons = json.loads(meta.read_text(encoding="utf-8")).get("horizons", [])
         except Exception:  # noqa: BLE001
             pass
+    wrf_done = (reg.parent / "wrfchem" / "validation.png").exists()
     return {
         "model": STATE.model_name,
         "horizons": horizons or list(range(1, 73)),
@@ -224,8 +225,11 @@ def model_card():
             "AQI is derived from the PM2.5 forecast (dominant pollutant in Delhi winter).",
         ],
         "wrfchem_validation": (
-            "Offline WRF-Chem run over a Delhi-NCR nest for a historical stubble-burning "
-            "spike, validated against CPCB observations — see wrfchem/validate.ipynb."
+            "Offline WRF-Chem run over a Delhi-NCR nest for the Nov 2025 stubble episode, "
+            "validated against CPCB — see wrfchem/VALIDATION.md."
+            if wrf_done else
+            "Offline WRF-Chem validation not yet run; config + runbook in wrfchem/. The "
+            "live ML emulator is validated on real CPCB data (see backtest above)."
         ),
         "region_bounds": list(NCR_BBOX),
     }

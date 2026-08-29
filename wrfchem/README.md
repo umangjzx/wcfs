@@ -5,10 +5,11 @@ the **one-off, offline** WRF-Chem run that grounds the emulator in real coupled 
 run once during prep on a cloud VM, validated against CPCB observations, and **not** wired
 into the API.
 
-Why it matters: it demonstrates the team engaged with the actual meteorology–chemistry
-coupling the problem statement asks for (aerosol–radiation feedback, aerosol–PBL feedback,
-inversion trapping), and the emulator's Inversion Strength Index + stubble-plume features
-are calibrated so their behaviour is consistent with the WRF-Chem run.
+Why it matters: it grounds the project in the actual meteorology–chemistry coupling the
+problem statement asks for (aerosol–radiation feedback, aerosol–PBL feedback, inversion
+trapping). Once the run exists, `validate.py` checks that the simulated PBL collapse and
+PM2.5 buildup during the episode line up with what the emulator's Inversion Strength Index
+and stubble-plume features imply.
 
 ## What's here
 
@@ -17,7 +18,7 @@ are calibrated so their behaviour is consistent with the WRF-Chem run.
 | `namelist.wps` | WPS domain: 9 km parent (`d01`) + 3 km Delhi-NCR nest (`d02`) |
 | `namelist.input` | WRF-Chem config: MOZART-MOSAIC gas+aerosol, aerosol direct + indirect effects on, YSU PBL |
 | `pipeline.md` | Emissions + boundary conditions: FINN (fires) + EDGAR (anthropogenic) + `mozbc`, per GMD *DSS v1.0* |
-| `validate.py` | Compares simulated surface PM2.5 vs CPCB for the target event → `validation.png` + `VALIDATION.md` |
+| `validate.py` | Compares **real** simulated surface PM2.5 vs CPCB for the target event → `validation.png` + `VALIDATION.md`. Requires a `--wrfout` file; no synthetic fallback. |
 | `run/` | (gitignored) WPS/WRF outputs — `met_em*`, `wrfinput*`, `wrfout_d02_*` |
 
 ## Target event
@@ -50,6 +51,7 @@ mpirun -np 16 ./wrf.exe
 python validate.py --wrfout run/wrfout_d02_2025-11-05_00:00:00
 ```
 
-Without a VM, `validate.py` falls back to the published GMD *DSS v1.0* bias characteristics
-so the comparison figure and `VALIDATION.md` still generate — clearly labelled as a
-reference, not a fresh run.
+`validate.py` requires a real `wrfout_d02` file — it does not synthesise a series. Until the
+run is done, `VALIDATION.md` says so and carries only the published *DSS v1.0* skill as a
+target. The live forecast path never touches WRF-Chem; the ML emulator is validated on its
+own against real CPCB data (`models/registry/backtest_metrics.json`).

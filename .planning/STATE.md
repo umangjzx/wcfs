@@ -53,8 +53,8 @@ Weighting/split history: over-weight → +38 bias; time-split → +26 bias; **P9
 - Historical CPCB targets: **OpenAQ S3 open-data archive** (keyless, 56/65 stations for winter 2025-26). `ingest.openaq --start … --end …`.
 - Historical met: Open-Meteo ERA5 archive (surface + BLH); pressure-level 925/850 hPa unavailable keyless for old dates → ISI runs 3/4 components, stubble transport uses Ekman-veered 10 m wind. Serving path (GFS) is full fidelity. `era5_arco.py` is a VM upgrade path.
 - API routes consolidated in one `api/routes/endpoints.py` (not 8 files).
-- Dashboard map uses a **self-contained MapLibre style** (no external basemap) — offline-safe; a minimal style must OMIT the `glyphs` key (not set it undefined). `React.StrictMode` removed (double-invoke churns the imperative map).
-- Demo resilience: `demo/snapshot/` committed; API boots from it with no keys/network.
+- Dashboard map: Esri "Dark Gray Canvas" raster basemap (keyless) with a blank-dark fallback on tile error; AQI field is a zoom-aware heatmap. `React.StrictMode` removed (double-invoke churns the imperative map).
+- **Live data only** (per user, 2026-08-29): no `demo/snapshot/`, no `naive_forecast` fallback. API serves 503 on `/api/forecast` until the first live ingest + trained-model run completes; `/api/stations` + `/api/health` are always up. `wrfchem/validate.py` requires a real `--wrfout` — no synthetic series.
 
 ### Done in the upgrade pass (commits 6f025ff, 965a2a4)
 

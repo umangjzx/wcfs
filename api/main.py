@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.endpoints import router
-from api.services.pipeline import STATE, load_snapshot, refresh
+from api.services.pipeline import STATE, refresh
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("vayucast.api")
@@ -25,8 +25,7 @@ _INGEST_ON_BOOT = os.environ.get("VAYUCAST_BOOT_INGEST", "1") != "0"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if load_snapshot():
-        log.info("loaded forecast snapshot from disk (stale until first refresh)")
+    log.info("live-data only: API serves 503 until the first refresh ingests real data")
 
     try:
         from api.services.store import enabled, init_schema

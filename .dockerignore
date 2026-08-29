@@ -15,7 +15,7 @@ data/raw
 data/interim
 data/processed
 data/snapshots
-!demo/snapshot
+demo
 
 .claude
 .planning

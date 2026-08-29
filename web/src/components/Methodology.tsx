@@ -43,12 +43,12 @@ export function Methodology({ onClose }: { onClose: () => void }) {
           boundary-layer growth further. The coupling is encoded as engineered features — an{" "}
           <strong>Inversion Strength Index</strong> and a{" "}
           <strong>stubble-plume transport vector</strong> — that a fast ML emulator learns
-          from. A one-off offline WRF-Chem run validates the approach against a historical
-          stubble-burning spike.
+          from. A one-off offline WRF-Chem run (namelists + runbook in the repo) is the
+          physics check against a historical stubble-burning spike.
         </p>
 
         <Section title="Model">
-          <Row k="Engine" v={mc?.model === "lgbm" ? "LightGBM multi-horizon quantile emulator" : "Baseline (persistence → climatology)"} />
+          <Row k="Engine" v={mc?.model === "lgbm" ? "LightGBM multi-horizon quantile emulator" : "awaiting first live refresh"} />
           <Row k="Horizon" v="72 hours, hourly, P10 / P50 / P90" />
         </Section>
 

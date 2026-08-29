@@ -224,8 +224,8 @@ function TopBar({
       <div style={{ flex: 1 }} />
       <span className="pill" style={{ background: "var(--color-muted)", color: "var(--color-muted-foreground)" }}>
         <Dot ok={health ? !health.stale : false} />
-        {health?.model_name === "lgbm" ? "ML emulator" : health?.model_name === "naive" ? "baseline" : "…"}
-        {health?.stale ? " · stale" : ""}
+        {health?.model_name === "lgbm" ? "ML emulator" : "awaiting live data"}
+        {health?.model_name === "lgbm" && health?.stale ? " · stale" : ""}
       </span>
       <span className="muted mono-num topbar-time" style={{ fontSize: 12 }}>updated {refreshed} IST</span>
       <button onClick={onMethodology}>Methodology</button>

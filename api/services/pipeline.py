@@ -1,9 +1,11 @@
 """The live forecast pipeline + in-memory state the API serves.
 
 refresh():  ingest (CPCB now + GFS forecast + FIRMS) -> serving feature matrix ->
-            model forecast -> AQI grid + per-station drivers + alerts -> cache + snapshot.
+            trained-model forecast -> AQI grid + per-station drivers + alerts -> in-memory cache.
 
-Every stage degrades gracefully; a failed refresh keeps the last good state and flags it stale.
+Live data only: there is no bundled snapshot and no heuristic fallback forecast. Until a
+refresh has ingested real CPCB/GFS/FIRMS data and the trained model has run, the API serves
+nothing (503). A failed refresh keeps the last good state and flags it stale.
 """
 
 from __future__ import annotations
@@ -70,6 +72,11 @@ STATE = PipelineState()
 
 # ---------------------------------------------------------------------------
 def _load_model():
+    """Load the trained forecaster from the registry, or ``(None, "none")``.
+
+    There is no heuristic fallback — if the registry has no usable model, the
+    pipeline raises and the API serves 503 rather than a synthetic forecast.
+    """
     from models.baseline_lgbm import REGISTRY, MultiForecaster
 
     if (REGISTRY / "lgbm_pm25_meta.json").exists():
@@ -77,62 +84,7 @@ def _load_model():
             return MultiForecaster.load(), "lgbm"
         except Exception:  # noqa: BLE001
             pass
-    return None, "naive"
-
-
-_REPO_ROOT = SETTINGS.data_dir.parent
-
-
-def _snapshot_paths(read: bool = False):
-    d = SETTINGS.snapshots_dir
-    # for reads, fall back to the committed demo seed if no live snapshot exists yet
-    if read and not (d / "api_meta.json").exists() and (_REPO_ROOT / "demo" / "snapshot" / "api_meta.json").exists():
-        d = _REPO_ROOT / "demo" / "snapshot"
-    return {
-        "forecast": d / "api_forecast.parquet",
-        "observations": d / "api_obs.parquet",
-        "fires": d / "api_fires.parquet",
-        "meta": d / "api_meta.json",
-    }
-
-
-def _save_snapshot() -> None:
-    p = _snapshot_paths()
-    SETTINGS.snapshots_dir.mkdir(parents=True, exist_ok=True)
-    if not STATE.forecast.empty:
-        STATE.forecast.to_parquet(p["forecast"], index=False)
-    if not STATE.observations.empty:
-        STATE.observations.to_parquet(p["observations"], index=False)
-    if not STATE.fires.empty:
-        STATE.fires.to_parquet(p["fires"], index=False)
-    p["meta"].write_text(json.dumps({
-        "drivers": STATE.drivers, "alerts": STATE.alerts, "sources": STATE.sources,
-        "model_name": STATE.model_name, "last_refresh": STATE.last_refresh,
-    }, indent=2), encoding="utf-8")
-
-
-def load_snapshot() -> bool:
-    p = _snapshot_paths(read=True)
-    if not p["meta"].exists():
-        return False
-    try:
-        meta = json.loads(p["meta"].read_text(encoding="utf-8"))
-        with STATE.lock:
-            if p["forecast"].exists():
-                STATE.forecast = pd.read_parquet(p["forecast"])
-            if p["observations"].exists():
-                STATE.observations = pd.read_parquet(p["observations"])
-            if p["fires"].exists():
-                STATE.fires = pd.read_parquet(p["fires"])
-            STATE.drivers = meta.get("drivers", {})
-            STATE.alerts = meta.get("alerts", [])
-            STATE.sources = meta.get("sources", [])
-            STATE.model_name = meta.get("model_name", "none")
-            STATE.last_refresh = meta.get("last_refresh")
-            STATE.stale = True
-        return True
-    except Exception:  # noqa: BLE001
-        return False
+    return None, "none"
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +92,7 @@ def refresh(*, do_ingest: bool = True) -> dict:
     """Run one full cycle. Returns a short status dict."""
     from features.build import build_matrix
     from models.serving import forecast as run_forecast
-    from models.serving import naive_forecast, peak_alerts
+    from models.serving import peak_alerts
 
     status = {"ok": False, "steps": []}
     try:
@@ -152,6 +104,8 @@ def refresh(*, do_ingest: bool = True) -> dict:
         obs = _read_or_empty(SETTINGS.processed_dir / "obs.parquet")
         met = _read_or_empty(SETTINGS.interim_dir / "weather_forecast.parquet")
         fires = _read_or_empty(SETTINGS.interim_dir / "fires_recent.parquet")
+        if obs.empty:
+            raise RuntimeError("no observations ingested yet — run a live ingest first")
         if met.empty:
             raise RuntimeError("no forecast meteorology available")
 
@@ -159,13 +113,14 @@ def refresh(*, do_ingest: bool = True) -> dict:
         status["steps"].append("features")
 
         fc, model_name = _load_model()
-        if fc is not None:
-            fdf = run_forecast(fc, feat)
-        else:
-            fdf = naive_forecast(feat)
+        if fc is None:
+            raise RuntimeError("no trained model in models/registry — train one first")
+        fdf = run_forecast(fc, feat)
+        if fdf.empty:
+            raise RuntimeError("model produced no forecast rows")
         status["steps"].append(f"forecast:{model_name}")
 
-        drivers = _compute_drivers(fc, feat, fdf) if fc is not None else {}
+        drivers = _compute_drivers(fc, feat, fdf)
         alerts = _decorate_alerts(peak_alerts(fdf))
 
         manifest = _read_manifest()
@@ -180,7 +135,6 @@ def refresh(*, do_ingest: bool = True) -> dict:
             STATE.model_name = model_name
             STATE.last_refresh = dt.datetime.now(_UTC).isoformat()
             STATE.stale = False
-        _save_snapshot()
         try:
             from api.services.store import write_refresh
             wrote = write_refresh(STATE)
