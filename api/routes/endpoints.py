@@ -16,6 +16,11 @@ router = APIRouter(prefix="/api")
 
 @router.get("/health")
 def health():
+    try:
+        from api.services.store import enabled as _store_enabled
+        store_on = _store_enabled()
+    except Exception:  # noqa: BLE001
+        store_on = False
     return {
         "status": "ok",
         "model_loaded": STATE.model_name not in ("none", "naive"),
@@ -23,6 +28,7 @@ def health():
         "last_refresh": STATE.last_refresh,
         "stale": STATE.stale,
         "sources": STATE.sources,
+        "postgres_mirror": store_on,
         "stations_in_forecast": int(STATE.forecast["station_id"].nunique()) if not STATE.forecast.empty else 0,
     }
 
@@ -77,6 +83,35 @@ def observations(station_id: str, hours: int = Query(72, ge=1, le=336)):
                        "ts": [t.isoformat() for t in g["ts"]],
                        "value": [None if pd.isna(v) else round(float(v), 2) for v in g["value"]]})
     return {"station_id": station_id, "series": series}
+
+
+@router.get("/history/{station_id}")
+def history(station_id: str, hours: int = Query(168, ge=1, le=8760)):
+    """Observation history for one station. Served from Postgres when the mirror is
+    enabled (retains far more than the in-memory cache), else from the live cache."""
+    if station_index().get(station_id) is None:
+        raise HTTPException(404, f"unknown station {station_id}")
+    try:
+        from api.services.store import observation_history
+        h = observation_history(station_id, hours)
+    except Exception:  # noqa: BLE001
+        h = None
+
+    if h is not None and not h.empty:
+        h["ts"] = pd.to_datetime(h["ts"], utc=True)
+        series = []
+        for pol, g in h.groupby("pollutant"):
+            g = g.sort_values("ts")
+            series.append({"pollutant": pol,
+                           "ts": [t.isoformat() for t in g["ts"]],
+                           "value": [None if pd.isna(v) else round(float(v), 2) for v in g["value"]]})
+        return {"station_id": station_id, "source": "postgres", "series": series}
+
+    # fall back to the in-memory observation cache
+    try:
+        return {**observations(station_id, min(hours, 336)), "source": "cache"}
+    except HTTPException:
+        return {"station_id": station_id, "source": "cache", "series": []}
 
 
 @router.get("/forecast/{station_id}")

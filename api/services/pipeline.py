@@ -181,6 +181,13 @@ def refresh(*, do_ingest: bool = True) -> dict:
             STATE.last_refresh = dt.datetime.now(_UTC).isoformat()
             STATE.stale = False
         _save_snapshot()
+        try:
+            from api.services.store import write_refresh
+            wrote = write_refresh(STATE)
+            if wrote is not None:
+                status["db"] = wrote
+        except Exception as exc:  # noqa: BLE001 - the Postgres mirror is best-effort
+            status["db_error"] = str(exc)
         status.update(ok=True, model=model_name, stations=int(fdf["station_id"].nunique()))
     except Exception as exc:  # noqa: BLE001
         STATE.stale = True

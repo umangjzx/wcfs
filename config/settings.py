@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     open_meteo_api_key: str | None = None
     vayucast_data_dir: Path = REPO_ROOT / "data"
 
+    # Optional Postgres mirror of the live pipeline state. Unset -> the API keeps
+    # serving from its in-memory cache and DB writes are skipped.
+    # e.g. postgresql+psycopg://vayucast:vayucast@db:5432/vayucast
+    database_url: str | None = None
+
     # --- derived paths -------------------------------------------------------
     @property
     def data_dir(self) -> Path:

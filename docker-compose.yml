@@ -10,6 +10,10 @@ services:
       OPENAQ_API_KEY: ${OPENAQ_API_KEY:-}
       VAYUCAST_BOOT_INGEST: ${VAYUCAST_BOOT_INGEST:-1}
       VAYUCAST_REFRESH_MIN: "60"
+      # Empty by default -> in-memory only. To turn on the Postgres mirror, start
+      # with `docker compose --profile db up` and set DATABASE_URL in your .env, e.g.
+      #   DATABASE_URL=postgresql+psycopg://vayucast:vayucast@db:5432/vayucast
+      DATABASE_URL: ${DATABASE_URL:-}
     volumes:
       - vayucast-data:/app/data
     ports:
@@ -31,5 +35,26 @@ services:
       - "8080:80"
     restart: unless-stopped
 
+  # Optional Postgres mirror. Off unless you pass `--profile db`.
+  #   docker compose --profile db up
+  db:
+    image: postgres:18-alpine
+    profiles: ["db"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vayucast}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vayucast}
+      POSTGRES_DB: ${POSTGRES_DB:-vayucast}
+    volumes:
+      - vayucast-pg:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vayucast}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   vayucast-data:
+  vayucast-pg:

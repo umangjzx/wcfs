@@ -17,7 +17,7 @@ COPY models ./models
 COPY api ./api
 
 # editable so config.settings.REPO_ROOT resolves to /app (where the model + snapshot land)
-RUN pip install --upgrade pip && pip install -e ".[model,api]"
+RUN pip install --upgrade pip && pip install -e ".[model,api,postgres]"
 
 # Bundled model + demo snapshot make the container demoable with no network.
 COPY models/registry ./models/registry

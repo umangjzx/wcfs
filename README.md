@@ -74,6 +74,27 @@ docker compose up --build
 The API boots from the committed `demo/snapshot/` so the dashboard works **with no
 network and no keys**; it refreshes from live feeds in the background when it can.
 
+### Optional: Postgres mirror
+
+By default the API holds the live state in memory (+ the Parquet snapshot). Set
+`DATABASE_URL` to also mirror every refresh — observations, the 72-hour forecast,
+active alerts, a per-station rollup and a `refresh_log` — into Postgres, where it
+persists across restarts and is queryable from psql / Grafana / BI. Reads for the
+map and forecast still come from the in-memory cache; `GET /api/history/{id}` is
+served from Postgres when it is enabled. A missing or unreachable database is a
+silent no-op — the API runs unchanged.
+
+```bash
+pip install -e ".[api,postgres]"           # adds SQLAlchemy + psycopg
+export DATABASE_URL=postgresql+psycopg://vayucast:vayucast@localhost:5432/vayucast
+
+# with Docker Compose — brings up an extra postgres:18 service:
+echo "DATABASE_URL=postgresql+psycopg://vayucast:vayucast@db:5432/vayucast" >> .env
+docker compose --profile db up --build
+```
+
+`GET /api/health` reports `"postgres_mirror": true` once it is wired up.
+
 ### Data source keys (all optional, all free)
 
 | Feed | Register at | Env var |

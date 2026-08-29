@@ -41,6 +41,12 @@ api = [
     "apscheduler>=3.10",
     "httpx>=0.27",
 ]
+# Optional Postgres mirror of the live pipeline state (DATABASE_URL). The API runs
+# fine without it — writes become a no-op when the URL is unset or unreachable.
+postgres = [
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.1",
+]
 # Historical pressure-level meteorology from ARCO-ERA5 (keyless Zarr on GCS).
 era5 = [
     "xarray>=2024.1",

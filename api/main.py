@@ -28,6 +28,13 @@ async def lifespan(app: FastAPI):
     if load_snapshot():
         log.info("loaded forecast snapshot from disk (stale until first refresh)")
 
+    try:
+        from api.services.store import enabled, init_schema
+        if enabled():
+            log.info("postgres mirror %s", "ready" if init_schema() else "configured (schema pending)")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("postgres mirror unavailable: %s", exc)
+
     def _boot():
         log.info("initial refresh starting (ingest=%s)", _INGEST_ON_BOOT)
         log.info("initial refresh: %s", refresh(do_ingest=_INGEST_ON_BOOT))
